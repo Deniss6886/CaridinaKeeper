@@ -42,5 +42,5 @@
 - `npm run test:e2e` passes: 7 Playwright tests across Chromium desktop/mobile (1 intentional mobile skip for the full form journey), including axe checks, backup round-trip, and release screenshot capture.
 - `npm run security:audit` passes with 0 vulnerabilities at the high threshold.
 - Production preview artifacts and screenshots were regenerated after the accessibility contrast/landmark fix.
-- GitHub CI, CodeQL, and Pages deployment runs succeeded for commit `22885ef`; live preview is `https://deniss6886.github.io/CaridinaKeeper/`.
+- GitHub CI, CodeQL, and Pages deployment runs succeeded for commits `22885ef` and `420b7d9`; live preview is `https://deniss6886.github.io/CaridinaKeeper/`.
 - GitHub repository is public with MIT license, Topics, Pages workflow, Dependabot, secret scanning, push protection, and Dependabot security updates enabled.
