@@ -203,8 +203,8 @@ The following must be complete before v0.1.1 is marked security-reviewed:
       tests.
 - [x] Complete dependency vulnerability and license reviews; npm signature attestation is unavailable (E404) and documented.
 - [x] Pin Actions to full SHAs and verify minimum token permissions.
-- [ ] Enable a private vulnerability-reporting route and replace the
-      placeholders in SECURITY.md.
+- [x] Enable a private vulnerability-reporting route; GitHub API verification
+      returned `{\"enabled\":true}`.
 - [ ] Inspect the live deployment's network log, console, security headers,
       manifest, service worker, and 404 behavior.
 - [ ] Confirm that no real personal data or secrets are committed or included

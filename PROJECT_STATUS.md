@@ -33,7 +33,7 @@ Last updated: 2026-09-12
 
 ## Remaining
 
-- Enable and verify GitHub Private Vulnerability Reporting if the repository setting permits it.
+- GitHub Private Vulnerability Reporting enabled and verified (`enabled: true`).
 - Reconcile safe Dependabot updates without merging incompatible TypeScript 7 or unmatched React updates.
 - Publish v0.1.1 only after local gates, clean clone, GitHub checks, deployment, and live verification are green.
 - Have the strongest available model perform the requested additional architecture, security, and final-quality review.
