@@ -1,0 +1,25 @@
+name: Feature request
+description: Propose a privacy-preserving, evidence-aware improvement.
+title: 'feat: '
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and keeper workflow
+      description: Who needs this, and what is difficult today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behaviour
+    validations:
+      required: true
+  - type: checkboxes
+    id: boundaries
+    attributes:
+      label: Safety and privacy
+      options:
+        - label: This does not require mandatory telemetry or an account.
+        - label: This does not diagnose animals or automatically actuate equipment.
