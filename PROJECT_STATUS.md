@@ -35,7 +35,6 @@ Last updated: 2026-09-12
 
 ## Remaining
 
-- Publish the v0.1.1 release tag and GitHub release after this final documentation commit.
 - Reconcile safe Dependabot updates without merging incompatible TypeScript 7 or unmatched React updates.
 - Have the strongest available model perform the requested additional architecture, security, and final-quality review.
 
@@ -54,4 +53,5 @@ Last updated: 2026-09-12
 ## Production and release
 
 - Canonical repository: `https://github.com/Deniss6886/CaridinaKeeper`.
-- The v0.1.1 release candidate is deployed at `https://deniss6886.github.io/CaridinaKeeper/`; the release tag/publication is the final remaining release action.
+- v0.1.1 is published at `https://github.com/Deniss6886/CaridinaKeeper/releases/tag/v0.1.1` and deployed at `https://deniss6886.github.io/CaridinaKeeper/`.
+- `main` is protected with strict required `verify / verify` and `analyze / Analyze JavaScript and TypeScript` checks, linear history, conversation resolution, no force-pushes, and admin enforcement.

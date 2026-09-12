@@ -2,7 +2,7 @@
 
 Review date: 2026-09-12
 
-Status: implementation review complete for the v0.1.1 release candidate; live deployment and release approval remain pending.
+Status: v0.1.1 implementation, deployment, and release review complete.
 
 This review covers the v0.1.1 static PWA, local IndexedDB persistence,
 JSON backup and restore, CSV export, service-worker behavior, GitHub Pages
@@ -210,7 +210,7 @@ The following must be complete before v0.1.1 is marked security-reviewed:
       deployed host returns 200 for the app, manifest, and worker; CSP is
       meta-delivered (no response header), and the external desktop/mobile E2E
       suite passes including offline navigation.
-- [ ] Confirm that no real personal data or secrets are committed or included
+- [x] Confirm that no real personal data or secrets are committed or included
       in demo data and screenshots.
 
 ## Verification record template
