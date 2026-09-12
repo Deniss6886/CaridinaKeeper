@@ -44,3 +44,4 @@
 - Production preview artifacts and screenshots were regenerated after the accessibility contrast/landmark fix.
 - GitHub CI, CodeQL, and Pages deployment runs succeeded for commits `22885ef` and `420b7d9`; live preview is `https://deniss6886.github.io/CaridinaKeeper/`.
 - GitHub repository is public with MIT license, Topics, Pages workflow, Dependabot, secret scanning, push protection, and Dependabot security updates enabled.
+- Git tag `v0.1.0` and GitHub release `https://github.com/Deniss6886/CaridinaKeeper/releases/tag/v0.1.0` published.
