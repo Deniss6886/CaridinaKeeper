@@ -205,8 +205,11 @@ The following must be complete before v0.1.1 is marked security-reviewed:
 - [x] Pin Actions to full SHAs and verify minimum token permissions.
 - [x] Enable a private vulnerability-reporting route; GitHub API verification
       returned `{\"enabled\":true}`.
-- [ ] Inspect the live deployment's network log, console, security headers,
-      manifest, service worker, and 404 behavior.
+- [x] Inspect the live deployment's network behavior, console, security
+      headers/meta policy, manifest, service worker, and route behavior. The
+      deployed host returns 200 for the app, manifest, and worker; CSP is
+      meta-delivered (no response header), and the external desktop/mobile E2E
+      suite passes including offline navigation.
 - [ ] Confirm that no real personal data or secrets are committed or included
       in demo data and screenshots.
 

@@ -14,6 +14,7 @@ Last updated: 2026-09-12
 - Reworked Playwright configuration to use an isolated production preview and run the complete workflow on both desktop and Pixel 7 projects with no retries or mobile skip.
 - Updated React and React DOM together to 19.3.0; retained TypeScript 6.0.3 because typescript-eslint 8.70.0 declares support below TypeScript 6.1.
 - Updated backup, architecture, development, release, roadmap, support, adoption, and OpenAI OSS readiness documentation; version prepared as 0.1.1.
+- Enabled and verified GitHub Private Vulnerability Reporting (`enabled: true`).
 
 ## Verified locally on the current working tree
 
@@ -26,16 +27,16 @@ Last updated: 2026-09-12
 - Installed dependency license metadata: present for every package; no GPL/AGPL dependency reported.
 - `git diff --check`: passed after the implementation pass.
 
-## In progress
+## Verified remotely
 
-- Final aggregate format/lint/type/unit/build gate: passed on the current working tree.
-- Independent final diff review, clean-room clone verification, commit, CI/CodeQL/Pages wait, and live production verification.
+- Release candidate commits `444419f`, `74ac355`, and `067d31f` are pushed to `main`.
+- GitHub CI, CodeQL v4, and the Pages deployment completed successfully for `067d31f` (run `34702318022`).
+- External live verification passed: 10 Playwright tests on desktop and Pixel 7 against `https://deniss6886.github.io/CaridinaKeeper/`; app, manifest, and service worker returned HTTP 200.
 
 ## Remaining
 
-- GitHub Private Vulnerability Reporting enabled and verified (`enabled: true`).
+- Publish the v0.1.1 release tag and GitHub release after this final documentation commit.
 - Reconcile safe Dependabot updates without merging incompatible TypeScript 7 or unmatched React updates.
-- Publish v0.1.1 only after local gates, clean clone, GitHub checks, deployment, and live verification are green.
 - Have the strongest available model perform the requested additional architecture, security, and final-quality review.
 
 ## Deferred
@@ -53,6 +54,4 @@ Last updated: 2026-09-12
 ## Production and release
 
 - Canonical repository: `https://github.com/Deniss6886/CaridinaKeeper`.
-- Current published release remains v0.1.0; v0.1.1 is not yet published.
-- Current live site remains `https://deniss6886.github.io/CaridinaKeeper/` until the gated v0.1.1 deployment completes.
-- No remote mutation has been made during this continuation before completing the local quality gates.
+- The v0.1.1 release candidate is deployed at `https://deniss6886.github.io/CaridinaKeeper/`; the release tag/publication is the final remaining release action.
