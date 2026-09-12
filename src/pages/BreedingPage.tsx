@@ -2,13 +2,20 @@ import { useState } from 'react';
 import type * as React from 'react';
 import { GitBranch, Plus, Sprout, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { ActionForm } from '../components/ui/ActionForm';
 import { Dialog } from '../components/ui/Dialog';
 import { Field, TextInput } from '../components/ui/FormField';
 import { PageHeader } from '../components/ui/PageHeader';
 import { useToast } from '../components/ui/Toast';
 import { useApp } from '../store/AppContext';
-import { dateInputValue, formatDateTime, formatNumber } from '../utils/format';
-import type { BreedingEventType, CrossGeneration } from '../domain/models';
+import {
+  dateInputValue,
+  formatDate,
+  formatNumber,
+  localDayToIso,
+  parseDecimal
+} from '../utils/format';
+import type { BreedingEventType, BreedingLine, CrossGeneration } from '../domain/models';
 
 export default function BreedingPage() {
   const { t, i18n } = useTranslation();
@@ -26,6 +33,7 @@ export default function BreedingPage() {
   const { notify } = useToast();
   const [activePanel, setActivePanel] = useState<'lines' | 'events' | 'crosses'>('lines');
   const [lineDialog, setLineDialog] = useState(false);
+  const [deletingLine, setDeletingLine] = useState<BreedingLine | null>(null);
   const [eventDialog, setEventDialog] = useState(false);
   const [crossDialog, setCrossDialog] = useState(false);
   const [lineDraft, setLineDraft] = useState({
@@ -72,9 +80,9 @@ export default function BreedingPage() {
       generation: lineDraft.generation.trim() || undefined,
       origin: lineDraft.origin.trim() || undefined,
       purchaseDate: lineDraft.purchaseDate || undefined,
-      count: Number(lineDraft.count) || 0,
+      count: parseDecimal(lineDraft.count) || 0,
       sex: lineDraft.sex.trim() || undefined,
-      price: lineDraft.price ? Number(lineDraft.price) : undefined,
+      price: lineDraft.price ? parseDecimal(lineDraft.price) : undefined,
       notes: lineDraft.notes.trim() || undefined
     });
     setLineDialog(false);
@@ -87,8 +95,8 @@ export default function BreedingPage() {
       breedingLineId: eventDraft.breedingLineId,
       tankId: eventDraft.tankId || undefined,
       type: eventDraft.type,
-      occurredAt: new Date(eventDraft.occurredAt).toISOString(),
-      count: eventDraft.count ? Number(eventDraft.count) : undefined,
+      occurredAt: localDayToIso(eventDraft.occurredAt),
+      count: eventDraft.count ? parseDecimal(eventDraft.count) : undefined,
       note: eventDraft.note.trim() || undefined
     });
     setEventDialog(false);
@@ -101,8 +109,10 @@ export default function BreedingPage() {
       !crossDraft.parentA ||
       !crossDraft.parentB ||
       crossDraft.parentA === crossDraft.parentB
-    )
+    ) {
+      notify(t('validation.differentParents'), 'error');
       return;
+    }
     await addCross({
       name: crossDraft.name.trim(),
       parentLineIds: [crossDraft.parentA, crossDraft.parentB],
@@ -125,19 +135,50 @@ export default function BreedingPage() {
             <button
               className="button button--secondary"
               type="button"
-              onClick={() => setEventDialog(true)}
+              disabled={!breedingLines.length}
+              onClick={() => {
+                setEventDraft({
+                  breedingLineId: breedingLines[0]?.id ?? '',
+                  tankId: '',
+                  type: 'berried',
+                  occurredAt: dateInputValue(),
+                  count: '',
+                  note: ''
+                });
+                setEventDialog(true);
+              }}
             >
               <Plus size={16} aria-hidden="true" />
               {t('breeding.addEvent')}
             </button>
-            <button className="button" type="button" onClick={() => setLineDialog(true)}>
+            <button
+              className="button"
+              type="button"
+              onClick={() => {
+                setLineDraft({
+                  name: '',
+                  species: '',
+                  variant: '',
+                  color: '',
+                  orangeEye: false,
+                  generation: '',
+                  origin: '',
+                  purchaseDate: '',
+                  count: '0',
+                  sex: '',
+                  price: '',
+                  notes: ''
+                });
+                setLineDialog(true);
+              }}
+            >
               <Plus size={16} aria-hidden="true" />
               {t('breeding.addLine')}
             </button>
           </div>
         }
       />
-      <div className="notice" style={{ marginBottom: '1rem' }}>
+      <div className="notice section-gap-bottom">
         <GitBranch size={17} aria-hidden="true" />
         <span>{t('breeding.noPrediction')}</span>
       </div>
@@ -183,7 +224,7 @@ export default function BreedingPage() {
         </button>
       </div>
       {activePanel === 'lines' ? (
-        <section className="card" style={{ marginTop: '1rem' }}>
+        <section className="card section-gap">
           <div className="card__header">
             <div>
               <h2>{t('breeding.lines')}</h2>
@@ -192,7 +233,23 @@ export default function BreedingPage() {
             <button
               className="button button--small"
               type="button"
-              onClick={() => setLineDialog(true)}
+              onClick={() => {
+                setLineDraft({
+                  name: '',
+                  species: '',
+                  variant: '',
+                  color: '',
+                  orangeEye: false,
+                  generation: '',
+                  origin: '',
+                  purchaseDate: '',
+                  count: '0',
+                  sex: '',
+                  price: '',
+                  notes: ''
+                });
+                setLineDialog(true);
+              }}
             >
               <Plus size={15} aria-hidden="true" />
               {t('breeding.addLine')}
@@ -221,9 +278,7 @@ export default function BreedingPage() {
                         className="icon-button"
                         type="button"
                         aria-label={`${t('common.delete')} ${line.name}`}
-                        onClick={() => {
-                          if (window.confirm(t('common.confirm'))) void deleteBreedingLine(line.id);
-                        }}
+                        onClick={() => setDeletingLine(line)}
                       >
                         <Trash2 size={16} aria-hidden="true" />
                       </button>
@@ -244,7 +299,7 @@ export default function BreedingPage() {
         </section>
       ) : null}
       {activePanel === 'events' ? (
-        <section className="card" style={{ marginTop: '1rem' }}>
+        <section className="card section-gap">
           <div className="card__header">
             <div>
               <h2>{t('breeding.events')}</h2>
@@ -253,7 +308,18 @@ export default function BreedingPage() {
             <button
               className="button button--small"
               type="button"
-              onClick={() => setEventDialog(true)}
+              disabled={!breedingLines.length}
+              onClick={() => {
+                setEventDraft({
+                  breedingLineId: breedingLines[0]?.id ?? '',
+                  tankId: '',
+                  type: 'berried',
+                  occurredAt: dateInputValue(),
+                  count: '',
+                  note: ''
+                });
+                setEventDialog(true);
+              }}
             >
               <Plus size={15} aria-hidden="true" />
               {t('breeding.addEvent')}
@@ -262,7 +328,10 @@ export default function BreedingPage() {
           <div className="card__body">
             <div className="timeline">
               {[...breedingEvents]
-                .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
+                .sort(
+                  (a, b) =>
+                    Date.parse(b.occurredAt) - Date.parse(a.occurredAt) || b.id.localeCompare(a.id)
+                )
                 .map((event) => (
                   <div className="timeline__item" key={event.id}>
                     <div className="timeline__rail">
@@ -273,10 +342,11 @@ export default function BreedingPage() {
                       <span>
                         {breedingLines.find((line) => line.id === event.breedingLineId)?.name ??
                           t('common.unknown')}{' '}
-                        · {event.count ? formatNumber(event.count, locale) : ''} {event.note ?? ''}
+                        · {event.count !== undefined ? formatNumber(event.count, locale) : ''}{' '}
+                        {event.note ?? ''}
                       </span>
                       <time dateTime={event.occurredAt}>
-                        {formatDateTime(event.occurredAt, locale)}
+                        {formatDate(event.occurredAt, locale)}
                       </time>
                     </div>
                   </div>
@@ -289,7 +359,7 @@ export default function BreedingPage() {
         </section>
       ) : null}
       {activePanel === 'crosses' ? (
-        <section className="card" style={{ marginTop: '1rem' }}>
+        <section className="card section-gap">
           <div className="card__header">
             <div>
               <h2>{t('breeding.crosses')}</h2>
@@ -298,7 +368,19 @@ export default function BreedingPage() {
             <button
               className="button button--small"
               type="button"
-              onClick={() => setCrossDialog(true)}
+              disabled={breedingLines.length < 2}
+              onClick={() => {
+                setCrossDraft({
+                  name: '',
+                  parentA: breedingLines[0]?.id ?? '',
+                  parentB: breedingLines[1]?.id ?? '',
+                  generation: 'F1',
+                  selectionGoal: '',
+                  notes: '',
+                  tankId: ''
+                });
+                setCrossDialog(true);
+              }}
             >
               <Plus size={15} aria-hidden="true" />
               {t('breeding.addCross')}
@@ -311,7 +393,11 @@ export default function BreedingPage() {
               <div className="grid grid--two">
                 {crosses.map((cross) => (
                   <article className="cross-card" key={cross.id}>
-                    <span className="badge badge--neutral">{cross.generation}</span>
+                    <span className="badge badge--neutral">
+                      {cross.generation === 'backcross'
+                        ? t('breeding.backcross')
+                        : cross.generation}
+                    </span>
                     <h3>{cross.name}</h3>
                     <p>
                       {breedingLines.find((line) => line.id === cross.parentLineIds[0])?.name ??
@@ -336,7 +422,7 @@ export default function BreedingPage() {
         onClose={() => setLineDialog(false)}
         size="wide"
       >
-        <form onSubmit={(event) => void saveLine(event)}>
+        <ActionForm onSubmit={saveLine}>
           <div className="form-grid">
             <TextInput
               label={t('breeding.lineName')}
@@ -392,6 +478,8 @@ export default function BreedingPage() {
             />
             <TextInput
               label={t('breeding.count')}
+              step="1"
+              max="1000000"
               type="number"
               min="0"
               value={lineDraft.count}
@@ -429,6 +517,7 @@ export default function BreedingPage() {
             <Field label={t('common.note')}>
               {({ id }) => (
                 <textarea
+                  maxLength={2000}
                   id={id}
                   value={lineDraft.notes}
                   onChange={(event) =>
@@ -450,7 +539,7 @@ export default function BreedingPage() {
               {t('common.save')}
             </button>
           </div>
-        </form>
+        </ActionForm>
       </Dialog>
       <Dialog
         open={eventDialog}
@@ -458,11 +547,12 @@ export default function BreedingPage() {
         closeLabel={t('common.close')}
         onClose={() => setEventDialog(false)}
       >
-        <form onSubmit={(event) => void saveEvent(event)}>
+        <ActionForm onSubmit={saveEvent}>
           <Field label={t('breeding.lineName')} required>
             {({ id }) => (
               <select
                 id={id}
+                required
                 value={eventDraft.breedingLineId}
                 onChange={(event) =>
                   setEventDraft((current) => ({ ...current, breedingLineId: event.target.value }))
@@ -539,6 +629,8 @@ export default function BreedingPage() {
           />
           <TextInput
             label={t('breeding.quantity')}
+            step="1"
+            max="1000000"
             type="number"
             min="0"
             value={eventDraft.count}
@@ -549,6 +641,7 @@ export default function BreedingPage() {
           <Field label={t('common.note')}>
             {({ id }) => (
               <textarea
+                maxLength={2000}
                 id={id}
                 value={eventDraft.note}
                 onChange={(event) =>
@@ -569,7 +662,7 @@ export default function BreedingPage() {
               {t('common.save')}
             </button>
           </div>
-        </form>
+        </ActionForm>
       </Dialog>
       <Dialog
         open={crossDialog}
@@ -577,7 +670,7 @@ export default function BreedingPage() {
         closeLabel={t('common.close')}
         onClose={() => setCrossDialog(false)}
       >
-        <form onSubmit={(event) => void saveCross(event)}>
+        <ActionForm onSubmit={saveCross}>
           <TextInput
             label={t('breeding.lineName')}
             required
@@ -590,6 +683,7 @@ export default function BreedingPage() {
             {({ id }) => (
               <select
                 id={id}
+                required
                 value={crossDraft.parentA}
                 onChange={(event) =>
                   setCrossDraft((current) => ({ ...current, parentA: event.target.value }))
@@ -608,6 +702,7 @@ export default function BreedingPage() {
             {({ id }) => (
               <select
                 id={id}
+                required
                 value={crossDraft.parentB}
                 onChange={(event) =>
                   setCrossDraft((current) => ({ ...current, parentB: event.target.value }))
@@ -636,7 +731,7 @@ export default function BreedingPage() {
               >
                 {(['F1', 'F2', 'backcross'] as CrossGeneration[]).map((generation) => (
                   <option key={generation} value={generation}>
-                    {generation}
+                    {generation === 'backcross' ? t('breeding.backcross') : generation}
                   </option>
                 ))}
               </select>
@@ -644,6 +739,7 @@ export default function BreedingPage() {
           </Field>
           <TextInput
             label={t('breeding.selectionGoal')}
+            maxLength={2000}
             required
             value={crossDraft.selectionGoal}
             onChange={(event) =>
@@ -671,6 +767,7 @@ export default function BreedingPage() {
           <Field label={t('common.note')}>
             {({ id }) => (
               <textarea
+                maxLength={2000}
                 id={id}
                 value={crossDraft.notes}
                 onChange={(event) =>
@@ -691,7 +788,36 @@ export default function BreedingPage() {
               {t('common.save')}
             </button>
           </div>
-        </form>
+        </ActionForm>
+      </Dialog>
+      <Dialog
+        open={Boolean(deletingLine)}
+        title={t('breeding.deleteTitle')}
+        description={t('breeding.deleteBody', { name: deletingLine?.name })}
+        closeLabel={t('common.close')}
+        onClose={() => setDeletingLine(null)}
+      >
+        <ActionForm
+          onSubmit={async () => {
+            if (!deletingLine) return;
+            await deleteBreedingLine(deletingLine.id);
+            setDeletingLine(null);
+            notify(t('breeding.deleted'));
+          }}
+        >
+          <div className="card__footer">
+            <button
+              className="button button--secondary"
+              type="button"
+              onClick={() => setDeletingLine(null)}
+            >
+              {t('common.cancel')}
+            </button>
+            <button className="button button--danger" type="submit">
+              {t('common.delete')}
+            </button>
+          </div>
+        </ActionForm>
       </Dialog>
     </>
   );

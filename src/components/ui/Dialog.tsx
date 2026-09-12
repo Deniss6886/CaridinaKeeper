@@ -31,6 +31,15 @@ export function Dialog({
     if (!open && dialog.open) dialog.close();
   }, [open]);
 
+  useEffect(() => {
+    if (!open) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [open]);
+
   return (
     <dialog
       ref={ref}
@@ -52,7 +61,7 @@ export function Dialog({
           <X aria-hidden="true" />
         </button>
       </header>
-      <div className="dialog__body">{children}</div>
+      <div className="dialog__body">{open ? children : null}</div>
     </dialog>
   );
 }

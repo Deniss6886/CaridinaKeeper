@@ -4,7 +4,7 @@ CaridinaKeeper is a privacy-first, offline-first progressive web app for aquariu
 
 Live preview: [deniss6886.github.io/CaridinaKeeper](https://deniss6886.github.io/CaridinaKeeper/) · Source: [GitHub](https://github.com/Deniss6886/CaridinaKeeper)
 
-> **Status:** 0.1.0 preview. The data model and workflows are usable, but migrations, browser support, and the Home Assistant connector remain under active development. Do not treat a target warning as a diagnosis or as permission to actuate equipment.
+> **Status:** 0.1.1 preview. The core local-first workflows are tested on Chromium desktop and mobile. Cross-browser coverage, future schema migrations, and the Home Assistant connector remain under development. Do not treat a target warning as a diagnosis or as permission to actuate equipment.
 
 ## What is included
 
@@ -30,7 +30,7 @@ Useful checks:
 
 ```bash
 npm run check       # format, lint, typecheck, unit tests, production build
-npm run test:e2e    # build, Chromium + mobile smoke and accessibility checks
+npm run test:e2e    # production build plus full Chromium desktop/mobile journeys and axe checks
 npm run security:audit
 ```
 

@@ -6,6 +6,7 @@ import {
   type BreedingEvent,
   type BreedingLine,
   type Cross,
+  type DataTableName,
   type EntityRecord,
   type MaintenanceEvent,
   type ParameterDefinition,
@@ -16,6 +17,7 @@ import {
   type WaterReading
 } from '../domain/models';
 import {
+  assertSafeObjectGraph,
   breedingEventSchema,
   breedingLineSchema,
   crossSchema,
@@ -27,6 +29,7 @@ import {
   targetRangeSchema,
   waterReadingSchema
 } from '../domain/validation';
+import { nextReminderDueAt } from '../domain/calculations';
 
 export const DATABASE_NAME = 'CaridinaKeeper';
 
@@ -89,6 +92,70 @@ export type EntityChanges<T extends EntityRecord> = Partial<
   Omit<T, 'id' | 'createdAt' | 'updatedAt'>
 >;
 
+export class RecordConflictError extends Error {
+  override name = 'RecordConflictError';
+}
+
+/** Must run in the same transaction as the write to prevent concurrent orphan creation. */
+async function assertRecordReferences(
+  owner: CaridinaKeeperDatabase,
+  tableName: string,
+  record: EntityRecord
+): Promise<void> {
+  const requireReference = async (table: Table, id: string | undefined, field: string) => {
+    if (id !== undefined && !(await table.get(id))) {
+      throw new Error(`${tableName}.${field} references missing ID ${id}.`);
+    }
+  };
+
+  for (const table of owner.tables) {
+    if (table.name !== tableName && (await table.get(record.id))) {
+      throw new Error(`Duplicate record ID: ${record.id}`);
+    }
+  }
+  switch (tableName as DataTableName) {
+    case 'tanks':
+      await requireReference(
+        owner.breedingLines,
+        (record as Tank).breedingLineId,
+        'breedingLineId'
+      );
+      break;
+    case 'waterReadings':
+    case 'targetRanges': {
+      const related = record as WaterReading | TargetRange;
+      await requireReference(owner.tanks, related.tankId, 'tankId');
+      await requireReference(owner.parameterDefinitions, related.parameterId, 'parameterId');
+      break;
+    }
+    case 'maintenanceEvents':
+    case 'reminders':
+      await requireReference(owner.tanks, (record as MaintenanceEvent | Reminder).tankId, 'tankId');
+      break;
+    case 'breedingEvents': {
+      const event = record as BreedingEvent;
+      await requireReference(owner.breedingLines, event.breedingLineId, 'breedingLineId');
+      await requireReference(owner.tanks, event.tankId, 'tankId');
+      await requireReference(owner.tanks, event.fromTankId, 'fromTankId');
+      await requireReference(owner.tanks, event.toTankId, 'toTankId');
+      break;
+    }
+    case 'crosses': {
+      const cross = record as Cross;
+      await requireReference(owner.tanks, cross.tankId, 'tankId');
+      for (const id of cross.parentLineIds) {
+        await requireReference(owner.breedingLines, id, 'parentLineIds');
+      }
+      break;
+    }
+  }
+}
+
+function parseRecord<T>(schema: z.ZodType<T>, record: unknown): T {
+  assertSafeObjectGraph(record);
+  return schema.parse(record);
+}
+
 export class ValidatedCrudRepository<T extends EntityRecord> {
   constructor(
     private readonly owner: CaridinaKeeperDatabase,
@@ -109,39 +176,139 @@ export class ValidatedCrudRepository<T extends EntityRecord> {
   }
 
   async add(record: T): Promise<string> {
-    const validRecord = this.schema.parse(record);
-    return this.table.add(validRecord);
+    const validRecord = parseRecord(this.schema, record);
+    return this.owner.transaction('rw', this.owner.tables, async () => {
+      await assertRecordReferences(this.owner, this.table.name, validRecord);
+      return this.table.add(validRecord);
+    });
   }
 
   async put(record: T): Promise<string> {
-    const validRecord = this.schema.parse(record);
-    return this.table.put(validRecord);
+    const validRecord = parseRecord(this.schema, record);
+    return this.owner.transaction('rw', this.owner.tables, async () => {
+      await assertRecordReferences(this.owner, this.table.name, validRecord);
+      return this.table.put(validRecord);
+    });
+  }
+
+  /** Replace a record only when the caller still owns the version it edited. */
+  async putIfUnchanged(record: T, expectedUpdatedAt: string): Promise<string> {
+    const validRecord = parseRecord(this.schema, record);
+    return this.owner.transaction('rw', this.owner.tables, async () => {
+      const existing = await this.table.get(validRecord.id);
+      if (!existing || existing.updatedAt !== expectedUpdatedAt) {
+        throw new RecordConflictError(`Record changed or was deleted: ${validRecord.id}`);
+      }
+      await assertRecordReferences(this.owner, this.table.name, validRecord);
+      return this.table.put(validRecord);
+    });
   }
 
   async bulkPut(records: readonly T[]): Promise<void> {
-    const validRecords = records.map((record) => this.schema.parse(record));
-    await this.table.bulkPut(validRecords);
+    assertSafeObjectGraph(records);
+    const validRecords = records.map((record) => parseRecord(this.schema, record));
+    if (new Set(validRecords.map(({ id }) => id)).size !== validRecords.length) {
+      throw new Error('Bulk write contains duplicate record IDs.');
+    }
+    await this.owner.transaction('rw', this.owner.tables, async () => {
+      for (const record of validRecords) {
+        await assertRecordReferences(this.owner, this.table.name, record);
+      }
+      await this.table.bulkPut(validRecords);
+    });
   }
 
   async update(id: string, changes: EntityChanges<T>, now = new Date()): Promise<T> {
-    return this.owner.transaction('rw', this.table, async () => {
+    assertSafeObjectGraph(changes);
+    return this.owner.transaction('rw', this.owner.tables, async () => {
       const existing = await this.table.get(id);
       if (!existing) throw new Error(`Record not found: ${id}`);
-      const updated = this.schema.parse({
+      const updated = parseRecord(this.schema, {
         ...existing,
         ...changes,
         id: existing.id,
         createdAt: existing.createdAt,
         updatedAt: now.toISOString()
       });
+      await assertRecordReferences(this.owner, this.table.name, updated);
       await this.table.put(updated);
       return updated;
     });
   }
 
   async delete(id: string): Promise<void> {
+    if (this.table.name === 'tanks') return deleteTankWithRelatedData(this.owner, id);
+    if (this.table.name === 'parameterDefinitions')
+      return deleteParameterWithReadings(this.owner, id);
+    if (this.table.name === 'breedingLines') {
+      return deleteBreedingLineWithRelatedData(this.owner, id);
+    }
     await this.table.delete(id);
   }
+}
+
+/** Replace a tank's complete target set only after every new record passes validation. */
+export async function replaceTargetRanges(
+  owner: CaridinaKeeperDatabase,
+  tankId: string,
+  records: readonly TargetRange[],
+  expectedVersions?: readonly Pick<TargetRange, 'id' | 'updatedAt'>[]
+): Promise<void> {
+  assertSafeObjectGraph(records);
+  const ranges = records.map((record) => parseRecord(targetRangeSchema, record));
+  if (ranges.some((range) => range.tankId !== tankId)) {
+    throw new Error('Every target range must belong to the selected tank.');
+  }
+  if (new Set(ranges.map(({ id }) => id)).size !== ranges.length) {
+    throw new Error('Target ranges contain duplicate record IDs.');
+  }
+  if (new Set(ranges.map(({ parameterId }) => parameterId)).size !== ranges.length) {
+    throw new Error('A tank has more than one target range for a parameter.');
+  }
+  await owner.transaction('rw', owner.tables, async () => {
+    if (!(await owner.tanks.get(tankId))) throw new Error(`Tank not found: ${tankId}`);
+    if (expectedVersions) {
+      const current = await owner.targetRanges.where('tankId').equals(tankId).toArray();
+      const currentSignature = current
+        .map(({ id, updatedAt }) => `${id}\u0000${updatedAt}`)
+        .sort()
+        .join('\u0001');
+      const expectedSignature = expectedVersions
+        .map(({ id, updatedAt }) => `${id}\u0000${updatedAt}`)
+        .sort()
+        .join('\u0001');
+      if (currentSignature !== expectedSignature) {
+        throw new RecordConflictError(`Target ranges changed: ${tankId}`);
+      }
+    }
+    for (const range of ranges) await assertRecordReferences(owner, 'targetRanges', range);
+    await owner.targetRanges.where('tankId').equals(tankId).delete();
+    await owner.targetRanges.bulkAdd(ranges);
+  });
+}
+
+/** Completing a repeat advances one calendar interval and keeps the reminder open. */
+export async function setReminderCompleted(
+  owner: CaridinaKeeperDatabase,
+  id: string,
+  completed: boolean,
+  now = new Date()
+): Promise<Reminder> {
+  return owner.transaction('rw', owner.tables, async () => {
+    const current = await owner.reminders.get(id);
+    if (!current) throw new Error('Reminder not found.');
+    const dueAt = completed ? nextReminderDueAt(current, now) : null;
+    const updated = parseRecord(reminderSchema, {
+      ...current,
+      dueAt: dueAt ?? current.dueAt,
+      completed: dueAt === null && completed,
+      completedAt: dueAt === null && completed ? now.toISOString() : undefined,
+      updatedAt: now.toISOString()
+    });
+    await assertRecordReferences(owner, 'reminders', updated);
+    await owner.reminders.put(updated);
+    return updated;
+  });
 }
 
 export function createCrudRepositories(owner: CaridinaKeeperDatabase) {

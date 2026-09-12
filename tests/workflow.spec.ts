@@ -1,60 +1,134 @@
 import { expect, test } from '@playwright/test';
+import {
+  addBreedingLine,
+  addMaintenance,
+  addReminder,
+  addTank,
+  addWaterReading,
+  gotoRoute,
+  inputDate,
+  inputDateTime,
+  openDialog,
+  setTargetRange
+} from './helpers';
 
-test('completes the core keeper journey and round-trips a backup', async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name === 'mobile', 'The full form journey runs once on desktop.');
+test('completes the keeper journey and atomically round-trips a backup', async ({ page }) => {
+  await gotoRoute(page, '/tanks');
+  await addTank(page, {
+    name: 'Acceptance Tank',
+    volume: '30,5',
+    length: '40',
+    width: '25',
+    height: '30',
+    startDate: inputDate(-30),
+    soil: 'Active soil',
+    soilInstalledAt: inputDate(-30),
+    filter: 'Sponge filter',
+    targetTemperature: '22,5',
+    species: 'Caridina cantonensis',
+    variant: 'Crystal Red',
+    residents: '12',
+    description: 'Acceptance journey',
+    notes: 'Stored only in this browser'
+  });
+  await setTargetRange(page, 'Acceptance Tank', 'Temperature', '20', '23');
 
-  await page.goto('/#/tanks');
-  await page.getByRole('button', { name: 'New tank' }).first().click();
-  await page.getByLabel('Tank name').fill('Acceptance Tank');
-  await page.getByLabel('Volume (L)').fill('30');
-  await page.getByLabel('Start date').fill('2026-09-01');
-  await page.getByLabel('Species').fill('Caridina cantonensis');
-  await page.getByLabel('Variant').fill('Crystal Red');
-  await page.getByRole('button', { name: 'Save' }).last().click();
-  await expect(page.getByText('Acceptance Tank').first()).toBeVisible();
+  await gotoRoute(page, '/water');
+  await addWaterReading(page, {
+    tank: 'Acceptance Tank',
+    parameter: 'Temperature',
+    value: '21,5',
+    measuredAt: inputDateTime(10),
+    method: 'Calibrated thermometer',
+    uncertainty: '0,2',
+    note: 'Before feeding'
+  });
+  await expect(page.getByText(/21[,.]5/).first()).toBeVisible();
 
-  await page.getByLabel('Temperature minimum').fill('20');
-  await page.getByLabel('Temperature maximum').fill('23');
-  await page.getByRole('button', { name: 'Save ranges' }).click();
-
-  await page.goto('/#/water');
-  await page.getByRole('button', { name: 'Add measurement' }).click();
-  const waterDialog = page.locator('dialog[open]');
-  await waterDialog.getByLabel('Tank').selectOption({ label: 'Acceptance Tank' });
-  await waterDialog.getByLabel('Parameter').selectOption({ label: 'Temperature · °C' });
-  await waterDialog.getByLabel('Value').fill('21.5');
-  await waterDialog.getByLabel('Method').fill('calibrated thermometer');
-  await waterDialog.getByRole('button', { name: 'Save' }).click();
-  await expect(page.getByText('21.5')).toBeVisible();
-
-  await page.goto('/#/breeding');
-  await page.getByRole('button', { name: 'Add line' }).first().click();
-  let breedingDialog = page.locator('dialog[open]');
-  await breedingDialog.getByLabel('Line name').fill('Acceptance Line');
-  await breedingDialog.getByLabel('Species').fill('Caridina cantonensis');
-  await breedingDialog.getByRole('button', { name: 'Save' }).click();
-  await expect(page.getByText('Acceptance Line').first()).toBeVisible();
-  await page.getByRole('button', { name: 'Log event' }).first().click();
-  breedingDialog = page.locator('dialog[open]');
+  await gotoRoute(page, '/breeding');
+  await addBreedingLine(page, {
+    name: 'Acceptance Line',
+    species: 'Caridina cantonensis',
+    variant: 'Crystal Red',
+    count: '12'
+  });
+  await page.getByRole('button', { name: 'Log event', exact: true }).first().click();
+  const breedingDialog = openDialog(page);
   await breedingDialog.getByLabel('Line name').selectOption({ label: 'Acceptance Line' });
-  await breedingDialog.getByRole('button', { name: 'Save' }).click();
+  await breedingDialog.getByLabel('Quantity').fill('3');
+  await breedingDialog.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(breedingDialog).not.toBeVisible();
 
-  await page.goto('/#/care');
-  await page.getByRole('button', { name: 'Log care' }).first().click();
-  const careDialog = page.locator('dialog[open]');
-  await careDialog.getByLabel('Tank').selectOption({ label: 'Acceptance Tank' });
-  await careDialog.getByRole('button', { name: 'Save' }).click();
+  await gotoRoute(page, '/care');
+  await addMaintenance(page, {
+    tank: 'Acceptance Tank',
+    type: 'water_change',
+    amount: '6,1',
+    unit: 'L',
+    percentage: '20',
+    note: 'Routine change'
+  });
+  await addReminder(page, {
+    title: 'Inspect moss',
+    tank: 'Acceptance Tank',
+    dueAt: inputDate()
+  });
 
-  await page.goto('/#/settings');
+  await gotoRoute(page, '/settings');
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Export full JSON backup' }).click();
   const backupDownload = await downloadPromise;
   const backupPath = await backupDownload.path();
-  expect(backupPath).toBeTruthy();
+  if (!backupPath) throw new Error('The browser did not provide a backup path.');
+
   await page.getByRole('button', { name: 'Delete all local records' }).click();
-  await page.locator('dialog[open]').getByRole('button', { name: 'Delete', exact: true }).click();
-  await page.locator('input[type="file"]').setInputFiles(backupPath!);
+  await openDialog(page).getByRole('button', { name: 'Delete', exact: true }).click();
+  await gotoRoute(page, '/tanks');
+  await expect(page.getByText('Acceptance Tank', { exact: true })).toHaveCount(0);
+
+  await gotoRoute(page, '/settings');
+  await page.locator('input[type="file"]').setInputFiles(backupPath);
+  const restoreDialog = openDialog(page);
+  await expect(restoreDialog).toContainText('Backup created:');
+  await expect(restoreDialog).toContainText('1');
+  await restoreDialog.getByRole('button', { name: 'Restore backup' }).click();
+  await expect(restoreDialog).not.toBeVisible();
   await expect(page.getByText('Backup restored successfully.')).toBeVisible();
-  await page.goto('/#/tanks');
-  await expect(page.getByText('Acceptance Tank').first()).toBeVisible();
+
+  await page.reload();
+  await gotoRoute(page, '/tanks');
+  await expect(page.getByText('Acceptance Tank', { exact: true }).first()).toBeVisible();
+  await gotoRoute(page, '/care');
+  await expect(page.getByText('Inspect moss', { exact: true })).toBeVisible();
+});
+
+test('rejects an invalid backup without replacing current records', async ({ page }) => {
+  await gotoRoute(page, '/tanks');
+  await addTank(page, {
+    name: 'Must Survive',
+    volume: '20',
+    length: '',
+    width: '',
+    height: '',
+    startDate: inputDate(),
+    soil: '',
+    soilInstalledAt: '',
+    filter: '',
+    targetTemperature: '',
+    species: '',
+    variant: '',
+    residents: '0',
+    description: '',
+    notes: ''
+  });
+  await gotoRoute(page, '/settings');
+  await page.locator('input[type="file"]').setInputFiles({
+    name: 'invalid.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from('{"format":"CaridinaKeeper","format":"tampered"}')
+  });
+  await expect(page.getByText('This backup is invalid and no data was changed.')).toBeVisible();
+  await expect(openDialog(page)).toHaveCount(0);
+  await gotoRoute(page, '/tanks');
+  await expect(page.getByText('Must Survive', { exact: true }).first()).toBeVisible();
 });

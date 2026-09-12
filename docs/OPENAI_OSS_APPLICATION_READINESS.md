@@ -1,8 +1,8 @@
-# OpenAI Codex for OSS readiness
+# OpenAI Codex for OSS readiness — NOT READY
 
 This document is a truthful preparation checklist, not a claim of eligibility or acceptance.
 
-The official [Codex for OSS programme page](https://openai.com/form/codex-for-oss/) describes active open-source maintainers working on meaningful projects with broad adoption, importance, or ongoing maintenance signals. The [programme terms](https://learn.chatgpt.com/docs/codex-for-oss-terms) govern participation and can change.
+The current official [Codex for Open Source page](https://learn.chatgpt.com/community/codex-for-oss) says core maintainers or maintainers of widely used public projects should apply; projects that play an important ecosystem role may explain that case even when they do not otherwise fit. Programme terms govern submission and can change.
 
 ## Evidence to gather after public release
 
@@ -13,6 +13,8 @@ The official [Codex for OSS programme page](https://openai.com/form/codex-for-os
 - the concrete coding task Codex would accelerate, its expected benefit, and a human review plan;
 - organisation ID only when applying on behalf of an eligible organisation.
 
-## Current truthful position
+## Current truthful position — 2026-09-12
 
-CaridinaKeeper is an early preview with a complete local-first foundation, not yet a project with demonstrated broad adoption. No application should be submitted until the public repository, maintenance cadence, user feedback, and actual adoption evidence exist. The project can still be improved now by keeping the repository healthy, transparent, tested, documented, and safe.
+CaridinaKeeper is an early public preview with a strong local-first foundation, but it has no verified external adoption, community contribution, or established maintenance history. The repository currently shows zero stars and forks and no user-reported issues. Automated Dependabot activity is not community evidence. The honest assessment is **NOT READY**, and no application should be submitted yet.
+
+Follow [the adoption plan](ADOPTION_PLAN.md), publish real maintenance responses, and reassess only when evidence exists. Technical quality improves the eventual case but does not substitute for a widely used project or a demonstrated important ecosystem role.

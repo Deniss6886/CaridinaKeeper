@@ -33,6 +33,89 @@ function ensureBackupSize(serialized: string): void {
   }
 }
 
+/** JSON.parse keeps only the last duplicate object member, so reject ambiguous files first. */
+function rejectDuplicateJsonMembers(serialized: string): void {
+  let position = 0;
+  const skipWhitespace = () => {
+    while (/\s/u.test(serialized[position] ?? '')) position += 1;
+  };
+  const readString = (): string => {
+    const start = position;
+    position += 1;
+    while (position < serialized.length) {
+      const character = serialized[position];
+      if (character === '\\') {
+        position += 2;
+        continue;
+      }
+      position += 1;
+      if (character === '"') break;
+    }
+    return JSON.parse(serialized.slice(start, position)) as string;
+  };
+  const readValue = (depth: number): void => {
+    if (depth > 128) throw new BackupValidationError('Backup JSON is nested too deeply.');
+    skipWhitespace();
+    const character = serialized[position];
+    if (character === '{') {
+      position += 1;
+      skipWhitespace();
+      const keys = new Set<string>();
+      if (serialized[position] === '}') {
+        position += 1;
+        return;
+      }
+      while (position < serialized.length) {
+        skipWhitespace();
+        if (serialized[position] !== '"') return;
+        const key = readString();
+        if (keys.has(key)) throw new BackupValidationError(`Duplicate JSON member: ${key}`);
+        keys.add(key);
+        skipWhitespace();
+        if (serialized[position] !== ':') return;
+        position += 1;
+        readValue(depth + 1);
+        skipWhitespace();
+        if (serialized[position] === '}') {
+          position += 1;
+          return;
+        }
+        if (serialized[position] !== ',') return;
+        position += 1;
+      }
+      return;
+    }
+    if (character === '[') {
+      position += 1;
+      skipWhitespace();
+      if (serialized[position] === ']') {
+        position += 1;
+        return;
+      }
+      while (position < serialized.length) {
+        readValue(depth + 1);
+        skipWhitespace();
+        if (serialized[position] === ']') {
+          position += 1;
+          return;
+        }
+        if (serialized[position] !== ',') return;
+        position += 1;
+      }
+      return;
+    }
+    if (character === '"') {
+      readString();
+      return;
+    }
+    while (position < serialized.length && !/[\s,\]}]/u.test(serialized[position] ?? '')) {
+      position += 1;
+    }
+  };
+
+  readValue(0);
+}
+
 function duplicateValues(values: readonly string[]): string[] {
   const seen = new Set<string>();
   const duplicates = new Set<string>();
@@ -134,14 +217,19 @@ export function validateBackup(input: unknown): BackupSchema {
   if (typeof input === 'string') {
     ensureBackupSize(input);
     try {
-      value = JSON.parse(input) as unknown;
+      const serialized = input.replace(/^\uFEFF/, '');
+      rejectDuplicateJsonMembers(serialized);
+      value = JSON.parse(serialized) as unknown;
+      assertSafeObjectGraph(value);
     } catch (error) {
+      if (error instanceof BackupValidationError) throw error;
       throw new BackupValidationError('Backup is not valid JSON.', { cause: error });
     }
   } else {
     try {
       assertSafeObjectGraph(input);
       const serialized = JSON.stringify(input);
+      if (serialized === undefined) throw new Error('Input cannot be serialized as JSON.');
       ensureBackupSize(serialized);
     } catch (error) {
       if (error instanceof BackupValidationError) throw error;
@@ -242,13 +330,15 @@ export type CsvCell = string | number | boolean | null | undefined;
 export type CsvDelimiter = ',' | ';';
 
 function neutralizeSpreadsheetFormula(value: string): string {
-  const firstMeaningfulCharacter = value.trimStart().charAt(0);
-  if (
-    value.startsWith('\t') ||
-    value.startsWith('\r') ||
-    ['=', '+', '-', '@'].includes(firstMeaningfulCharacter)
-  ) {
-    return `'${value}`;
+  // Normalize only for detection: preserve users' original text and Unicode in the output.
+  const firstMeaningfulCharacter = value
+    .normalize('NFKC')
+    .replace(/^[\s\p{Cf}\p{Cc}]*/u, '')
+    .charAt(0);
+  if (/^[\t\r\n]/.test(value) || ['=', '+', '-', '@'].includes(firstMeaningfulCharacter)) {
+    // Quoted tab prefix is intended for human spreadsheet viewing (including Excel).
+    // It is part of the cell value; JSON backups preserve the exact original data.
+    return `\t${value}`;
   }
   return value;
 }
@@ -270,6 +360,7 @@ export function buildSafeCsv(
   rows: ReadonlyArray<readonly CsvCell[]>,
   delimiter: CsvDelimiter = ','
 ): string {
+  if (delimiter !== ',' && delimiter !== ';') throw new RangeError('Unsupported CSV delimiter.');
   if (headers.length === 0 || headers.length > 100) {
     throw new RangeError('CSV must have between 1 and 100 columns.');
   }
@@ -294,7 +385,7 @@ export function exportWaterReadingsCsv(
   const tankNames = new Map(tanks.map((tank) => [tank.id, tank.name]));
   const parameterNames = new Map(parameters.map((parameter) => [parameter.id, parameter.name]));
   const rows = [...readings]
-    .sort((left, right) => left.measuredAt.localeCompare(right.measuredAt))
+    .sort((left, right) => Date.parse(left.measuredAt) - Date.parse(right.measuredAt))
     .map((reading): readonly CsvCell[] => [
       reading.id,
       tankNames.get(reading.tankId) ?? reading.tankId,
@@ -306,9 +397,12 @@ export function exportWaterReadingsCsv(
       reading.uncertainty ?? '',
       reading.note ?? ''
     ]);
-  return buildSafeCsv(
-    ['ID', 'Tank', 'Parameter', 'Value', 'Unit', 'Measured at', 'Method', 'Uncertainty', 'Note'],
-    rows,
-    delimiter
+  return (
+    '\uFEFF' +
+    buildSafeCsv(
+      ['ID', 'Tank', 'Parameter', 'Value', 'Unit', 'Measured at', 'Method', 'Uncertainty', 'Note'],
+      rows,
+      delimiter
+    )
   );
 }

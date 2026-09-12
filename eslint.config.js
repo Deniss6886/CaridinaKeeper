@@ -5,7 +5,12 @@ import reactRefresh from 'eslint-plugin-react-refresh';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['dist', 'coverage', 'playwright-report', 'test-results', 'tests'] },
+  { ignores: ['dist', 'coverage', 'playwright-report', 'test-results'] },
+  {
+    files: ['**/*.{js,mjs}'],
+    extends: [js.configs.recommended],
+    languageOptions: { globals: globals.node }
+  },
   {
     files: ['**/*.{ts,tsx}'],
     extends: [js.configs.recommended, ...tseslint.configs.recommendedTypeChecked],
@@ -23,10 +28,14 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
-      'react-hooks/set-state-in-effect': 'off',
       '@typescript-eslint/consistent-type-imports': 'error',
       '@typescript-eslint/no-misused-promises': ['error', { checksVoidReturn: false }],
-      'react-refresh/only-export-components': 'off'
+      'react-refresh/only-export-components': ['error', { allowConstantExport: true }]
     }
+  },
+  {
+    // Context hooks intentionally share their provider modules.
+    files: ['src/store/AppContext.tsx', 'src/components/ui/Toast.tsx'],
+    rules: { 'react-refresh/only-export-components': 'off' }
   }
 );

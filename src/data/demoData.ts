@@ -64,8 +64,9 @@ const parameters: ParameterDefinition[] = [
   {
     ...entity('parameter_tds'),
     key: 'tds',
-    name: 'Leitwert/TDS',
+    name: 'TDS',
     unit: 'ppm',
+    description: 'TDS-Anzeige des Messgeräts; keine direkte Leitfähigkeitsmessung.',
     precision: 0,
     sortOrder: 50,
     isBuiltIn: true
@@ -86,6 +87,26 @@ const parameters: ParameterDefinition[] = [
     unit: 'mg/L',
     precision: 2,
     sortOrder: 70,
+    isBuiltIn: true
+  },
+  {
+    ...entity('parameter_ec'),
+    key: 'ec',
+    name: 'Leitfähigkeit (EC)',
+    unit: 'µS/cm',
+    description: 'Elektrische Leitfähigkeit; getrennt von TDS dokumentieren.',
+    precision: 0,
+    sortOrder: 80,
+    isBuiltIn: true
+  },
+  {
+    ...entity('parameter_ammonia'),
+    key: 'ammonia',
+    name: 'Ammonium / Ammoniak',
+    unit: 'mg/L',
+    description: 'NH₄/NH₃-Messwert; Testmethode und gemessene Form im Messprotokoll angeben.',
+    precision: 2,
+    sortOrder: 90,
     isBuiltIn: true
   }
 ];
@@ -489,15 +510,15 @@ export async function loadDemoData(
   owner: CaridinaKeeperDatabase,
   options: { replaceExisting?: boolean } = {}
 ): Promise<BackupSchema> {
-  const existingRecordCount = await owner.transaction('r', owner.tables, async () => {
+  const backup = createDemoBackup();
+  return owner.transaction('rw', owner.tables, async () => {
     let count = 0;
     for (const table of owner.tables) count += await table.count();
-    return count;
+    if (count > 0 && options.replaceExisting !== true) {
+      throw new Error(
+        'Database is not empty. Explicitly request replacement before loading demo data.'
+      );
+    }
+    return restoreBackup(owner, backup);
   });
-  if (existingRecordCount > 0 && options.replaceExisting !== true) {
-    throw new Error(
-      'Database is not empty. Explicitly request replacement before loading demo data.'
-    );
-  }
-  return restoreBackup(owner, createDemoBackup());
 }

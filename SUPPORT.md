@@ -1,6 +1,6 @@
 # Support
 
-For usage questions, open a GitHub discussion or issue with:
+For usage questions, open a GitHub issue with:
 
 - app version and browser/OS;
 - whether the issue survives a reload;

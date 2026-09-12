@@ -7,15 +7,19 @@ import {
   useState,
   type ReactNode
 } from 'react';
+import { liveQuery } from 'dexie';
+import packageJson from '../../package.json';
 import {
   clearAllData,
   createCrudRepositories,
   database,
   deleteBreedingLineWithRelatedData,
-  deleteTankWithRelatedData
+  deleteTankWithRelatedData,
+  replaceTargetRanges,
+  setReminderCompleted
 } from '../data/database';
 import { exportWaterReadingsCsv, restoreBackup, serializeBackup } from '../data/backup';
-import { createDemoData, loadDemoData } from '../data/demoData';
+import { loadDemoData } from '../data/demoData';
 import {
   createEntityTimestamps,
   createStableId,
@@ -136,7 +140,10 @@ function makeDefaultSettings(): Settings {
   return {
     id: SETTINGS_ID,
     ...createEntityTimestamps(),
-    locale: 'en',
+    locale:
+      typeof navigator !== 'undefined' && navigator.language.toLowerCase().startsWith('de')
+        ? 'de'
+        : 'en',
     theme: 'system',
     reducedMotion: false,
     defaultWaterChangePercent: 20,
@@ -154,11 +161,12 @@ interface AppContextValue extends BackupData {
   error: string | null;
   refresh: () => Promise<void>;
   addTank: (input: Omit<Tank, 'id' | 'createdAt' | 'updatedAt'>) => Promise<Tank>;
-  saveTank: (tank: Tank) => Promise<void>;
+  saveTank: (tank: Tank, expectedUpdatedAt: string) => Promise<void>;
   deleteTank: (id: string) => Promise<void>;
   saveTargetRanges: (
     tankId: string,
-    ranges: Array<Omit<TargetRange, 'id' | 'createdAt' | 'updatedAt' | 'tankId'>>
+    ranges: Array<Omit<TargetRange, 'id' | 'createdAt' | 'updatedAt' | 'tankId'>>,
+    expectedVersions?: readonly Pick<TargetRange, 'id' | 'updatedAt'>[]
   ) => Promise<void>;
   addParameter: (
     input: Omit<ParameterDefinition, 'id' | 'createdAt' | 'updatedAt'>
@@ -191,6 +199,61 @@ interface AppContextValue extends BackupData {
 
 const AppContext = createContext<AppContextValue | null>(null);
 
+// One transaction serializes first-run initialization across StrictMode and tabs.
+async function ensureDefaults() {
+  await database.transaction('rw', database.tables, async () => {
+    const repositories = createCrudRepositories(database);
+    const existingKeys = new Set(
+      (await database.parameterDefinitions.toArray()).map((parameter) => parameter.key)
+    );
+    const missingParameters = BUILT_IN_PARAMETERS.filter(
+      (parameter) => !existingKeys.has(parameter.key)
+    ).map(makeParameter);
+    if (missingParameters.length) {
+      await repositories.parameterDefinitions.bulkPut(missingParameters);
+    }
+    if (!(await database.settings.get(SETTINGS_ID)))
+      await repositories.settings.put(makeDefaultSettings());
+  });
+}
+
+async function clearUserRecordsPreservingPreferences() {
+  await database.transaction('rw', database.tables, async () => {
+    const currentSettings = await database.settings.get(SETTINGS_ID);
+    await clearAllData(database);
+    const repositories = createCrudRepositories(database);
+    await repositories.parameterDefinitions.bulkPut(BUILT_IN_PARAMETERS.map(makeParameter));
+    await repositories.settings.put({
+      ...(currentSettings ?? makeDefaultSettings()),
+      id: SETTINGS_ID,
+      updatedAt: new Date().toISOString(),
+      onboardingCompleted: false,
+      demoDataLoaded: false
+    });
+  });
+}
+
+async function readSnapshot(): Promise<BackupData> {
+  return database.transaction('r', database.tables, async () => ({
+    tanks: await database.tanks.toArray(),
+    waterReadings: await database.waterReadings.toArray(),
+    parameterDefinitions: await database.parameterDefinitions.toArray(),
+    targetRanges: await database.targetRanges.toArray(),
+    maintenanceEvents: await database.maintenanceEvents.toArray(),
+    breedingLines: await database.breedingLines.toArray(),
+    breedingEvents: await database.breedingEvents.toArray(),
+    crosses: await database.crosses.toArray(),
+    reminders: await database.reminders.toArray(),
+    settings: await database.settings.toArray()
+  }));
+}
+
+function operationError(cause: unknown): string {
+  return cause instanceof Error && cause.name === 'QuotaExceededError'
+    ? 'errors.quota'
+    : 'errors.storage';
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<BackupData>(emptyData);
   const [loading, setLoading] = useState(true);
@@ -198,44 +261,45 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const repos = useMemo(() => createCrudRepositories(database), []);
 
   const refresh = useCallback(async () => {
-    setError(null);
-    const next: BackupData = {
-      tanks: await database.tanks.toArray(),
-      waterReadings: await database.waterReadings.toArray(),
-      parameterDefinitions: await database.parameterDefinitions.toArray(),
-      targetRanges: await database.targetRanges.toArray(),
-      maintenanceEvents: await database.maintenanceEvents.toArray(),
-      breedingLines: await database.breedingLines.toArray(),
-      breedingEvents: await database.breedingEvents.toArray(),
-      crosses: await database.crosses.toArray(),
-      reminders: await database.reminders.toArray(),
-      settings: await database.settings.toArray()
-    };
-    setData(next);
+    setData(await readSnapshot());
   }, []);
 
   useEffect(() => {
     let active = true;
+    let unsubscribe: (() => void) | undefined;
     void (async () => {
       try {
         await database.open();
-        if ((await database.parameterDefinitions.count()) === 0) {
-          await database.parameterDefinitions.bulkAdd(BUILT_IN_PARAMETERS.map(makeParameter));
-        }
-        if ((await database.settings.count()) === 0)
-          await database.settings.add(makeDefaultSettings());
-        if (active) await refresh();
+        await ensureDefaults();
+        if (!active) return;
+        const subscription = liveQuery(readSnapshot).subscribe({
+          next(next) {
+            if (active) {
+              setData(next);
+              setError(null);
+              setLoading(false);
+            }
+          },
+          error(cause: unknown) {
+            if (active) {
+              setError(operationError(cause));
+              setLoading(false);
+            }
+          }
+        });
+        unsubscribe = () => subscription.unsubscribe();
       } catch (cause) {
-        if (active)
-          setError(cause instanceof Error ? cause.message : 'Unable to open local database.');
-      } finally {
-        if (active) setLoading(false);
+        if (active) {
+          setError(operationError(cause));
+          setLoading(false);
+        }
       }
     })();
     return () => {
       active = false;
+      unsubscribe?.();
     };
-  }, [refresh]);
+  }, []);
 
   const commit = useCallback(
     async (work: () => Promise<void>) => {
@@ -244,8 +308,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
         await work();
         await refresh();
       } catch (cause) {
-        const message = cause instanceof Error ? cause.message : 'Local operation failed.';
-        setError(message);
+        if (
+          cause instanceof Error &&
+          [
+            'AbortError',
+            'DatabaseClosedError',
+            'InvalidStateError',
+            'OpenFailedError',
+            'QuotaExceededError',
+            'UnknownError'
+          ].includes(cause.name)
+        ) {
+          setError(operationError(cause));
+        }
         throw cause;
       }
     },
@@ -254,33 +329,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<AppContextValue>(() => {
     const addTank = async (input: Omit<Tank, 'id' | 'createdAt' | 'updatedAt'>) => {
-      const tank = { id: createStableId('tank'), ...createEntityTimestamps(), ...input };
+      const tank = { ...input, id: createStableId('tank'), ...createEntityTimestamps() };
       await commit(() => repos.tanks.add(tank).then(() => undefined));
       return tank;
     };
-    const saveTank = (tank: Tank) => commit(() => repos.tanks.put(tank).then(() => undefined));
+    const saveTank = (tank: Tank, expectedUpdatedAt: string) =>
+      commit(() => repos.tanks.putIfUnchanged(tank, expectedUpdatedAt).then(() => undefined));
     const deleteTank = (id: string) => commit(() => deleteTankWithRelatedData(database, id));
     const saveTargetRanges = (
       tankId: string,
-      ranges: Array<Omit<TargetRange, 'id' | 'createdAt' | 'updatedAt' | 'tankId'>>
+      ranges: Array<Omit<TargetRange, 'id' | 'createdAt' | 'updatedAt' | 'tankId'>>,
+      expectedVersions?: readonly Pick<TargetRange, 'id' | 'updatedAt'>[]
     ) =>
       commit(async () => {
-        await database.transaction('rw', database.targetRanges, async () => {
-          await database.targetRanges.where('tankId').equals(tankId).delete();
-          const records = ranges.map((range) => ({
-            id: createStableId('target'),
-            ...createEntityTimestamps(),
-            tankId,
-            ...range
-          }));
-          if (records.length) await database.targetRanges.bulkAdd(records);
-        });
+        const records = ranges.map((range) => ({
+          ...range,
+          id: createStableId('target'),
+          ...createEntityTimestamps(),
+          tankId
+        }));
+        await replaceTargetRanges(database, tankId, records, expectedVersions);
       });
     const addReading = async (input: Omit<WaterReading, 'id' | 'createdAt' | 'updatedAt'>) => {
       const reading = {
+        ...input,
         id: createStableId('reading'),
-        ...createEntityTimestamps(),
-        ...input
+        ...createEntityTimestamps()
       };
       await commit(() => repos.waterReadings.add(reading).then(() => undefined));
       return reading;
@@ -289,18 +363,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
       input: Omit<ParameterDefinition, 'id' | 'createdAt' | 'updatedAt'>
     ) => {
       const parameter = {
+        ...input,
         id: createStableId('parameter'),
-        ...createEntityTimestamps(),
-        ...input
+        ...createEntityTimestamps()
       };
       await commit(() => repos.parameterDefinitions.add(parameter).then(() => undefined));
       return parameter;
     };
     const addBreedingLine = async (input: Omit<BreedingLine, 'id' | 'createdAt' | 'updatedAt'>) => {
       const line = {
+        ...input,
         id: createStableId('line'),
-        ...createEntityTimestamps(),
-        ...input
+        ...createEntityTimestamps()
       };
       await commit(() => repos.breedingLines.add(line).then(() => undefined));
       return line;
@@ -309,15 +383,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       input: Omit<BreedingEvent, 'id' | 'createdAt' | 'updatedAt'>
     ) => {
       const event = {
+        ...input,
         id: createStableId('breeding'),
-        ...createEntityTimestamps(),
-        ...input
+        ...createEntityTimestamps()
       };
       await commit(() => repos.breedingEvents.add(event).then(() => undefined));
       return event;
     };
     const addCross = async (input: Omit<Cross, 'id' | 'createdAt' | 'updatedAt'>) => {
-      const cross = { id: createStableId('cross'), ...createEntityTimestamps(), ...input };
+      const cross = { ...input, id: createStableId('cross'), ...createEntityTimestamps() };
       await commit(() => repos.crosses.add(cross).then(() => undefined));
       return cross;
     };
@@ -327,51 +401,42 @@ export function AppProvider({ children }: { children: ReactNode }) {
       input: Omit<MaintenanceEvent, 'id' | 'createdAt' | 'updatedAt'>
     ) => {
       const event = {
+        ...input,
         id: createStableId('maintenance'),
-        ...createEntityTimestamps(),
-        ...input
+        ...createEntityTimestamps()
       };
       await commit(() => repos.maintenanceEvents.add(event).then(() => undefined));
       return event;
     };
     const addReminder = async (input: Omit<Reminder, 'id' | 'createdAt' | 'updatedAt'>) => {
       const reminder = {
+        ...input,
         id: createStableId('reminder'),
-        ...createEntityTimestamps(),
-        ...input
+        ...createEntityTimestamps()
       };
       await commit(() => repos.reminders.add(reminder).then(() => undefined));
       return reminder;
     };
     const toggleReminder = (id: string, completed: boolean) =>
-      commit(async () => {
-        const current = await database.reminders.get(id);
-        if (!current) throw new Error('Reminder not found.');
-        await database.reminders.put({
-          ...current,
-          completed,
-          completedAt: completed ? new Date().toISOString() : undefined,
-          updatedAt: new Date().toISOString()
-        });
-      });
+      commit(() => setReminderCompleted(database, id, completed).then(() => undefined));
     const updateSettings = (changes: Partial<Omit<Settings, 'id' | 'createdAt' | 'updatedAt'>>) =>
       commit(async () => {
-        const current = (await database.settings.get(SETTINGS_ID)) ?? makeDefaultSettings();
-        await database.settings.put({
-          ...current,
-          ...changes,
-          id: SETTINGS_ID,
-          updatedAt: new Date().toISOString()
-        });
+        await repos.settings.update(SETTINGS_ID, changes);
       });
-    const exportBackup = () => serializeBackup(database, { pretty: true });
+    const exportBackup = () =>
+      serializeBackup(database, { appVersion: packageJson.version, pretty: true });
     const exportCsv = () =>
       exportWaterReadingsCsv(data.waterReadings, data.tanks, data.parameterDefinitions);
     const importBackup = (input: string) =>
-      commit(() => restoreBackup(database, input).then(() => undefined));
+      commit(() =>
+        database.transaction('rw', database.tables, async () => {
+          await restoreBackup(database, input);
+          await ensureDefaults();
+        })
+      );
     const loadDemo = () =>
       commit(() => loadDemoData(database, { replaceExisting: true }).then(() => undefined));
-    const deleteAll = () => commit(() => clearAllData(database));
+    const deleteAll = () => commit(clearUserRecordsPreservingPreferences);
 
     return {
       ...data,
@@ -407,8 +472,4 @@ export function useApp(): AppContextValue {
   const value = useContext(AppContext);
   if (!value) throw new Error('useApp must be used inside AppProvider');
   return value;
-}
-
-export function createBlankDemoData(): BackupData {
-  return createDemoData();
 }

@@ -1,5 +1,8 @@
 export function formatDate(value: string | Date, locale: string): string {
-  const date = typeof value === 'string' ? new Date(value) : value;
+  const date =
+    typeof value === 'string'
+      ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T12:00:00` : value)
+      : value;
   if (Number.isNaN(date.getTime())) return '—';
   return new Intl.DateTimeFormat(locale, {
     day: '2-digit',
@@ -14,6 +17,7 @@ export function formatDateTime(value: string | Date, locale: string): string {
   return new Intl.DateTimeFormat(locale, {
     day: '2-digit',
     month: 'short',
+    year: 'numeric',
     hour: '2-digit',
     minute: '2-digit'
   }).format(date);
@@ -35,9 +39,22 @@ export function dateTimeInputValue(date = new Date()): string {
 
 export function daysSince(value?: string): number | null {
   if (!value) return null;
-  const date = new Date(value);
+  const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T12:00:00` : value);
   if (Number.isNaN(date.getTime())) return null;
-  return Math.max(0, Math.floor((Date.now() - date.getTime()) / 86_400_000));
+  const today = new Date();
+  const day = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+  const currentDay = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+  return Math.max(0, Math.round((currentDay - day) / 86_400_000));
+}
+
+/** Accept the decimal separator used by either supported language. */
+export function parseDecimal(value: string): number {
+  const normalized = value.trim().replace(',', '.');
+  return /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(normalized) ? Number(normalized) : Number.NaN;
+}
+
+export function localDayToIso(value: string): string {
+  return new Date(`${value}T12:00:00`).toISOString();
 }
 
 export function downloadText(filename: string, content: string, type: string): void {
@@ -50,5 +67,5 @@ export function downloadText(filename: string, content: string, type: string): v
   document.body.append(anchor);
   anchor.click();
   anchor.remove();
-  URL.revokeObjectURL(url);
+  window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }

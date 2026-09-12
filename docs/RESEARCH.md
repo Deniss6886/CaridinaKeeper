@@ -167,7 +167,7 @@ The current domain model includes a `TargetRange`. Product copy and schema evolu
 The inspected repository pins the following baseline:
 
 - Node.js `>=24.0.0`; Node 24.19.0 was the verified local runtime. The official [Node.js release table](https://nodejs.org/en/about/previous-releases) is the source of truth for maintenance status.
-- React and React DOM 19.2.7 with React Router 7.18.3.
+- React and React DOM 19.3.0 with React Router 7.18.3.
 - TypeScript 6.0.3 with strict mode and `noUncheckedIndexedAccess`.
 - Vite 8.3.0 and `vite-plugin-pwa` 1.3.0 with a prompt-based service-worker update flow.
 - Dexie 4.4.6 over IndexedDB for local persistence.
@@ -178,7 +178,7 @@ The inspected repository pins the following baseline:
 - an MIT license identifier in `package.json`;
 - no required application backend in the current v0.1 architecture.
 
-**Version decision:** React 19.3 had been announced three days before this snapshot ([release post](https://react.dev/blog/2026/09/09/react-19-3), [React versions](https://react.dev/versions)). Keeping React 19.2.7 for v0.1 is a deliberate conservative choice while the application stabilizes. TypeScript 7 was also available as a major toolchain transition ([TypeScript 7 announcement](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/)), but the typescript-eslint compatibility policy documented support below TypeScript 6.1 at this snapshot ([supported dependency versions](https://typescript-eslint.io/users/dependency-versions/)). TypeScript 6.0.3 therefore avoids an unsupported lint/compiler combination. Upgrade those components together only after compatibility and the full check suite are confirmed.
+**Version decision:** React 19.3 was adopted as a matched `react`/`react-dom` pair after the complete unit, build, accessibility, desktop, and mobile journey suites passed. TypeScript 7 was also available as a major toolchain transition ([TypeScript 7 announcement](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/)), but the typescript-eslint compatibility policy documented support below TypeScript 6.1 at this snapshot ([supported dependency versions](https://typescript-eslint.io/users/dependency-versions/)). TypeScript 6.0.3 therefore avoids an unsupported lint/compiler combination until that peer range changes.
 
 Node 24 is the deliberate production baseline: it was an LTS line at the snapshot, while Node 26 was still Current. This follows Node's recommendation that production applications use Active LTS or Maintenance LTS releases rather than Current releases.
 

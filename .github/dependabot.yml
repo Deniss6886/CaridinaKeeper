@@ -5,6 +5,15 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
+    groups:
+      react:
+        patterns:
+          - react
+          - react-dom
+      vitest:
+        patterns:
+          - vitest
+          - '@vitest/*'
     labels:
       - dependencies
       - security
@@ -12,5 +21,9 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    groups:
+      codeql:
+        patterns:
+          - github/codeql-action/*
     labels:
       - dependencies

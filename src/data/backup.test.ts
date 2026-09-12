@@ -14,9 +14,20 @@ describe('backup and export safety', () => {
     expect(() => validateBackup(broken)).toThrow(/missing ID/);
   });
 
+  it('rejects ambiguous or unsafe serialized object structures', () => {
+    const valid = JSON.stringify(createDemoBackup());
+    expect(() => validateBackup(valid.replace('"format":', '"format":"other","format":'))).toThrow(
+      /Duplicate JSON member/
+    );
+    expect(() => validateBackup('{"a":1,"\\u0061":2}')).toThrow(/Duplicate JSON member/);
+    expect(() => validateBackup('{"__proto__":{}}')).toThrow();
+  });
+
   it('neutralizes spreadsheet formulas and preserves delimiters', () => {
-    expect(buildSafeCsv(['name'], [['=SUM(A1:A2)']])).toBe('"name"\r\n"\'=SUM(A1:A2)"');
+    expect(buildSafeCsv(['name'], [['=SUM(A1:A2)']])).toBe('"name"\r\n"\t=SUM(A1:A2)"');
     expect(buildSafeCsv(['a', 'b'], [['hello', 'world']], ';')).toBe('"a";"b"\r\n"hello";"world"');
+    expect(buildSafeCsv(['name'], [['　＝cmd']])).toContain('\t　＝cmd');
+    expect(buildSafeCsv(['name'], [['safe + text']])).not.toContain('\tsafe');
   });
 
   it('exports water readings with human-readable labels', () => {

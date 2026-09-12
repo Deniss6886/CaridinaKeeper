@@ -43,7 +43,8 @@ function isRealIsoDate(value: string): boolean {
   const month = parts[1];
   const day = parts[2];
   if (year === undefined || month === undefined || day === undefined) return false;
-  const date = new Date(Date.UTC(year, month - 1, day));
+  const date = new Date(0);
+  date.setUTCFullYear(year, month - 1, day);
   return (
     date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
   );
@@ -71,7 +72,15 @@ export const isoDateTimeSchema = z
   .min(20)
   .max(35)
   .regex(ISO_DATE_TIME_PATTERN, 'Expected an ISO date-time with timezone')
-  .refine((value) => Number.isFinite(Date.parse(value)), 'Date-time does not exist');
+  .refine(
+    (value) =>
+      isRealIsoDate(value.slice(0, 10)) &&
+      Number(value.slice(11, 13)) < 24 &&
+      Number(value.slice(14, 16)) < 60 &&
+      Number(value.slice(17, 19)) < 60 &&
+      Number.isFinite(Date.parse(value)),
+    'Date-time does not exist'
+  );
 
 export const finiteNumberSchema = z.number().finite().min(-1_000_000_000).max(1_000_000_000);
 const nonNegativeNumberSchema = z.number().finite().min(0).max(1_000_000_000);
@@ -118,7 +127,20 @@ export const tankSchema: z.ZodType<Tank> = z
     inhabitants: z.array(tankInhabitantSchema).max(500),
     breedingLineId: idSchema.optional()
   })
-  .strict();
+  .strict()
+  .superRefine((tank, context) => {
+    const ids = new Set<string>();
+    for (const [index, inhabitant] of tank.inhabitants.entries()) {
+      if (ids.has(inhabitant.id)) {
+        context.addIssue({
+          code: 'custom',
+          path: ['inhabitants', index, 'id'],
+          message: 'A tank must not contain duplicate inhabitant IDs'
+        });
+      }
+      ids.add(inhabitant.id);
+    }
+  });
 
 export const parameterDefinitionSchema: z.ZodType<ParameterDefinition> = z
   .object({
@@ -282,7 +304,18 @@ export const settingsSchema: z.ZodType<Settings> = z
   .object({
     ...entityFields,
     id: z.literal(SETTINGS_ID),
-    locale: z.string().trim().min(2).max(35),
+    locale: z
+      .string()
+      .trim()
+      .min(2)
+      .max(35)
+      .refine((value) => {
+        try {
+          return Intl.getCanonicalLocales(value).length === 1;
+        } catch {
+          return false;
+        }
+      }, 'Locale must be a valid language tag'),
     theme: z.enum(['system', 'light', 'dark']),
     reducedMotion: z.boolean(),
     defaultWaterChangePercent: z.number().finite().min(0).max(100),
@@ -345,7 +378,7 @@ const FORBIDDEN_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
 /** Reject prototype-pollution payloads and pathological object graphs before schema parsing. */
 export function assertSafeObjectGraph(value: unknown): void {
   let visitedNodes = 0;
-  const seen = new WeakSet<object>();
+  const ancestors = new WeakSet<object>();
 
   const visit = (current: unknown, depth: number): void => {
     visitedNodes += 1;
@@ -361,24 +394,36 @@ export function assertSafeObjectGraph(value: unknown): void {
     if (typeof current === 'string' && current.length > MAX_LONG_TEXT_LENGTH) {
       throw new Error('Input contains an oversized string.');
     }
-    if (current === null || typeof current !== 'object') return;
-    if (seen.has(current)) throw new Error('Input contains a circular reference.');
-    seen.add(current);
-
-    if (Array.isArray(current)) {
-      if (current.length > MAX_ARRAY_ITEMS) throw new Error('Input array is too large.');
-      for (const child of current) visit(child, depth + 1);
-      return;
+    if (['function', 'symbol', 'bigint'].includes(typeof current)) {
+      throw new Error('Input contains a value that cannot be stored in JSON.');
     }
+    if (current === null || typeof current !== 'object') return;
+    if (ancestors.has(current)) throw new Error('Input contains a circular reference.');
+    ancestors.add(current);
 
+    const isArray = Array.isArray(current);
     const prototype = Reflect.getPrototypeOf(current);
-    if (prototype !== Object.prototype && prototype !== null) {
+    if (
+      isArray ? prototype !== Array.prototype : prototype !== Object.prototype && prototype !== null
+    ) {
       throw new Error('Input contains a non-plain object.');
     }
-    for (const [key, child] of Object.entries(current)) {
+    if (isArray && current.length > MAX_ARRAY_ITEMS) throw new Error('Input array is too large.');
+    // Read descriptors, never values: getters and custom iterators must not run during validation.
+    for (const key of Reflect.ownKeys(current)) {
+      if (typeof key !== 'string') throw new Error('Input contains a symbol property.');
       if (FORBIDDEN_KEYS.has(key)) throw new Error(`Forbidden object key: ${key}`);
-      visit(child, depth + 1);
+      const descriptor = Reflect.getOwnPropertyDescriptor(current, key);
+      if (!descriptor || !('value' in descriptor)) {
+        throw new Error('Input contains an accessor property.');
+      }
+      if (isArray && key === 'length') continue;
+      if (isArray && !/^(?:0|[1-9]\d*)$/.test(key)) {
+        throw new Error('Input array contains a non-index property.');
+      }
+      visit(descriptor.value, depth + 1);
     }
+    ancestors.delete(current);
   };
 
   visit(value, 0);

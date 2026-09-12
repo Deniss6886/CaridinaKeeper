@@ -10,11 +10,11 @@ risks.
 
 ## Supported versions
 
-Before the first public release, only the current main branch is maintained.
-After the v0.1.0 release, the latest v0.1.x release will receive security fixes.
+Before the first v0.1.1 release, only the current main branch is maintained.
+After v0.1.1 is published, the latest v0.1.x release will receive security fixes.
 Pre-release builds and older snapshots are not supported.
 
-This table will be updated when the first release is published:
+This table will be updated when v0.1.1 is published:
 
 | Version                  | Supported                      |
 | ------------------------ | ------------------------------ |
@@ -31,8 +31,8 @@ The preferred reporting channel is GitHub Private Vulnerability Reporting:
 
     https://github.com/Deniss6886/CaridinaKeeper/security/advisories/new
 
-Private Vulnerability Reporting should be enabled on the canonical repository
-after publication.
+Private Vulnerability Reporting is part of the v0.1.1 release gate and will be
+verified on the canonical repository before publication.
 
 If the private reporting form is not yet available, open a public issue that
 contains only a request for a private security contact. Do not include the

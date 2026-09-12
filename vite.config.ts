@@ -5,9 +5,34 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 const base = process.env.CARIDINA_BASE_PATH ?? '/';
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   base,
   plugins: [
+    {
+      name: 'caridina-content-security-policy',
+      transformIndexHtml: {
+        order: 'pre',
+        handler(html) {
+          // Vite's local dev server injects React Refresh scripts and CSS.
+          // Production remains restricted to scripts and styles from this origin.
+          const development = command === 'serve';
+          const policy = [
+            "default-src 'self'",
+            `script-src 'self'${development ? " 'unsafe-inline'" : ''}`,
+            `style-src 'self'${development ? " 'unsafe-inline'" : ''}`,
+            "img-src 'self' data: blob:",
+            "font-src 'self'",
+            `connect-src 'self'${development ? ' ws://127.0.0.1:* ws://localhost:*' : ''}`,
+            "worker-src 'self'",
+            "manifest-src 'self'",
+            "object-src 'none'",
+            "base-uri 'none'",
+            "form-action 'self'"
+          ].join('; ');
+          return html.replace('__CARIDINA_CSP__', policy);
+        }
+      }
+    },
     react(),
     VitePWA({
       registerType: 'prompt',
@@ -43,6 +68,7 @@ export default defineConfig({
       workbox: {
         cleanupOutdatedCaches: true,
         clientsClaim: true,
+        skipWaiting: false,
         navigateFallback: 'index.html',
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         runtimeCaching: []
@@ -51,7 +77,7 @@ export default defineConfig({
   ],
   build: {
     target: 'es2022',
-    sourcemap: true,
+    sourcemap: false,
     rollupOptions: {
       output: {
         manualChunks(id) {
@@ -68,7 +94,7 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: './src/test/setup.ts',
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.{ts,tsx}'],
     exclude: ['node_modules', 'dist', 'tests/**'],
     coverage: {
       provider: 'v8',
@@ -79,4 +105,4 @@ export default defineConfig({
   },
   server: { host: '127.0.0.1', port: 4173, strictPort: true },
   preview: { host: '127.0.0.1', port: 4173, strictPort: true }
-});
+}));

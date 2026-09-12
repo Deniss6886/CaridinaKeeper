@@ -7,8 +7,12 @@ const en = {
       name: 'CaridinaKeeper',
       privacy: 'Local on this device',
       offlineReady: 'Ready offline',
+      offlineError: 'Offline support could not be installed.',
+      online: 'Online',
+      offline: 'Offline',
       updateReady: 'An update is ready.',
       update: 'Update now',
+      updateConfirm: 'Reload now to install the update? Unsaved form entries will be lost.',
       later: 'Later'
     },
     nav: {
@@ -56,7 +60,14 @@ const en = {
       entries: '{{count}} entries',
       back: 'Back',
       confirm: 'Confirm',
-      clearFilter: 'Clear filter'
+      clearFilter: 'Clear filter',
+      actionFailed: 'The action could not be completed. Your existing data was not changed.',
+      saving: 'Saving…',
+      showMore: 'Show more',
+      minimum: 'Minimum',
+      maximum: 'Maximum',
+      reload: 'Reload app',
+      skipToContent: 'Skip to content'
     },
     dashboard: {
       eyebrow: 'Tank room pulse',
@@ -84,7 +95,8 @@ const en = {
       lastWaterChange: 'Last water change',
       never: 'Not recorded',
       warningExplanation:
-        'Warnings compare measurements with your own ranges. They are not universal care advice.'
+        'Warnings compare measurements with your own ranges. They are not universal care advice.',
+      stable: 'No current warnings'
     },
     tanks: {
       title: 'Tanks',
@@ -123,7 +135,12 @@ const en = {
       attention: '{{count}} values need review',
       stable: 'Within your ranges',
       noTargets: 'No personal ranges configured',
-      saveTargets: 'Save ranges'
+      noComparableData: 'No comparable readings yet',
+      saveTargets: 'Save ranges',
+      rangeHelp: 'Leave both values empty to remove a range. Enter both values to save it.',
+      rangesSaved: 'Target ranges saved.',
+      species: 'Species',
+      variant: 'Variant'
     },
     water: {
       title: 'Water measurements',
@@ -143,6 +160,9 @@ const en = {
       outOfRange: 'Outside your target',
       inRange: 'Inside your target',
       noTarget: 'No target set',
+      allParameters: 'All parameters',
+      precision: 'Decimal places',
+      unitMismatch: 'Unit does not match this target range',
       saved: 'Measurement saved.',
       scientificNote:
         'EC/TDS describes dissolved ions in aggregate; it does not identify their composition. Context matters.'
@@ -177,6 +197,11 @@ const en = {
         'CaridinaKeeper records observed lineage. It does not predict genetics or outcomes.',
       emptyLines: 'Add a line to connect breeding events and tank records.',
       saved: 'Breeding record saved.',
+      backcross: 'Backcross',
+      deleteTitle: 'Delete this breeding line?',
+      deleteBody:
+        'The line and its linked breeding events, crosses and tank links will be removed from this device.',
+      deleted: 'Breeding line deleted.',
       types: {
         berried: 'Berried shrimp',
         released: 'Young released',
@@ -202,6 +227,7 @@ const en = {
       titleLabel: 'Task title',
       repeat: 'Repeat',
       amount: 'Amount / volume',
+      waterChangePercent: 'Water change (%)',
       complete: 'Mark complete',
       reopen: 'Reopen',
       saved: 'Care record saved.',
@@ -220,7 +246,9 @@ const en = {
         none: 'Does not repeat',
         daily: 'Daily',
         weekly: 'Weekly',
-        monthly: 'Monthly'
+        monthly: 'Monthly',
+        quarterly: 'Every three months',
+        yearly: 'Yearly'
       }
     },
     settings: {
@@ -253,6 +281,14 @@ const en = {
       demoData: 'Demo workspace',
       loadDemo: 'Replace with labelled demo data',
       demoHelp: 'Demo data is fictional and clearly marked. Loading it replaces local records.',
+      demoTitle: 'Replace local data with the demo?',
+      confirmDemo: 'Load demo data',
+      restoreTitle: 'Restore this backup?',
+      replaceBody: 'All current aquarium records will be replaced only after final confirmation.',
+      backupDate: 'Backup created: {{date}}',
+      backupSummary: '{{tanks}} tanks, {{readings}} readings, {{lines}} breeding lines',
+      confirmRestore: 'Restore backup',
+      reducedMotion: 'Reduce motion',
       danger: 'Delete local data',
       deleteAll: 'Delete all local records',
       deleteTitle: 'Delete every local record?',
@@ -268,7 +304,21 @@ const en = {
       nonNegative: 'Enter zero or a positive number.',
       invalidDate: 'Enter a valid date.',
       minMax: 'Minimum must not be greater than maximum.',
-      generic: 'Check the highlighted fields.'
+      generic: 'Check the highlighted fields.',
+      completeDimensions: 'Enter all three dimensions or leave all three empty.',
+      residentSpecies: 'Enter a species when residents or a variant are recorded.',
+      completeRange: 'Enter both minimum and maximum, or leave both empty.',
+      numberRange: 'Enter a finite number from {{min}} to {{max}}.',
+      wholeNumber: 'Enter a whole number.',
+      differentParents: 'Choose two different parent lines.'
+    },
+    errors: {
+      storage: 'Local storage is unavailable. Check browser permissions and try again.',
+      quota: 'This browser has no storage space left. Export a backup before freeing space.',
+      editConflict:
+        'This record changed or was deleted in another tab. Your draft was kept; reload it before saving again.',
+      renderTitle: 'CaridinaKeeper could not display this page.',
+      renderBody: 'Your local data remains stored. Reload the app to try again.'
     },
     parameters: {
       temperature: 'Temperature',
@@ -290,8 +340,13 @@ const de = {
       name: 'CaridinaKeeper',
       privacy: 'Lokal auf diesem Gerät',
       offlineReady: 'Offline bereit',
+      offlineError: 'Die Offline-Unterstützung konnte nicht installiert werden.',
+      online: 'Online',
+      offline: 'Offline',
       updateReady: 'Ein Update ist verfügbar.',
       update: 'Jetzt aktualisieren',
+      updateConfirm:
+        'Jetzt neu laden, um das Update zu installieren? Nicht gespeicherte Formulareingaben gehen verloren.',
       later: 'Später'
     },
     nav: {
@@ -339,7 +394,15 @@ const de = {
       entries: '{{count}} Einträge',
       back: 'Zurück',
       confirm: 'Bestätigen',
-      clearFilter: 'Filter löschen'
+      clearFilter: 'Filter löschen',
+      actionFailed:
+        'Die Aktion konnte nicht abgeschlossen werden. Bestehende Daten blieben unverändert.',
+      saving: 'Wird gespeichert…',
+      showMore: 'Mehr anzeigen',
+      minimum: 'Minimum',
+      maximum: 'Maximum',
+      reload: 'App neu laden',
+      skipToContent: 'Zum Inhalt springen'
     },
     dashboard: {
       eyebrow: 'Puls des Beckenraums',
@@ -367,7 +430,8 @@ const de = {
       lastWaterChange: 'Letzter Wasserwechsel',
       never: 'Nicht erfasst',
       warningExplanation:
-        'Hinweise vergleichen Messungen mit deinen eigenen Bereichen. Sie sind keine universelle Haltungsberatung.'
+        'Hinweise vergleichen Messungen mit deinen eigenen Bereichen. Sie sind keine universelle Haltungsberatung.',
+      stable: 'Keine aktuellen Hinweise'
     },
     tanks: {
       title: 'Becken',
@@ -406,7 +470,13 @@ const de = {
       attention: '{{count}} Werte prüfen',
       stable: 'In deinen Zielbereichen',
       noTargets: 'Keine persönlichen Bereiche festgelegt',
-      saveTargets: 'Bereiche speichern'
+      noComparableData: 'Noch keine vergleichbaren Messwerte',
+      saveTargets: 'Bereiche speichern',
+      rangeHelp:
+        'Lass beide Werte leer, um einen Bereich zu entfernen. Gib beide Werte zum Speichern ein.',
+      rangesSaved: 'Zielbereiche gespeichert.',
+      species: 'Art',
+      variant: 'Variante'
     },
     water: {
       title: 'Wasserwerte',
@@ -426,6 +496,9 @@ const de = {
       outOfRange: 'Außerhalb deines Ziels',
       inRange: 'Innerhalb deines Ziels',
       noTarget: 'Kein Ziel festgelegt',
+      allParameters: 'Alle Parameter',
+      precision: 'Dezimalstellen',
+      unitMismatch: 'Einheit passt nicht zu diesem Zielbereich',
       saved: 'Messung gespeichert.',
       scientificNote:
         'EC/TDS beschreibt gelöste Ionen insgesamt, aber nicht ihre Zusammensetzung. Der Kontext zählt.'
@@ -460,6 +533,11 @@ const de = {
         'CaridinaKeeper protokolliert beobachtete Abstammung. Es prognostiziert weder Genetik noch Ergebnisse.',
       emptyLines: 'Lege eine Linie an, um Zuchtereignisse und Becken zu verknüpfen.',
       saved: 'Zuchteintrag gespeichert.',
+      backcross: 'Rückkreuzung',
+      deleteTitle: 'Diese Zuchtlinie löschen?',
+      deleteBody:
+        'Die Linie und verknüpfte Zuchtereignisse, Kreuzungen und Beckenverknüpfungen werden von diesem Gerät entfernt.',
+      deleted: 'Zuchtlinie gelöscht.',
       types: {
         berried: 'Tragende Garnele',
         released: 'Nachwuchs entlassen',
@@ -485,6 +563,7 @@ const de = {
       titleLabel: 'Aufgabentitel',
       repeat: 'Wiederholung',
       amount: 'Menge / Volumen',
+      waterChangePercent: 'Wasserwechsel (%)',
       complete: 'Als erledigt markieren',
       reopen: 'Wieder öffnen',
       saved: 'Pflegeeintrag gespeichert.',
@@ -503,7 +582,9 @@ const de = {
         none: 'Keine Wiederholung',
         daily: 'Täglich',
         weekly: 'Wöchentlich',
-        monthly: 'Monatlich'
+        monthly: 'Monatlich',
+        quarterly: 'Vierteljährlich',
+        yearly: 'Jährlich'
       }
     },
     settings: {
@@ -536,6 +617,14 @@ const de = {
       demoData: 'Demo-Arbeitsbereich',
       loadDemo: 'Durch markierte Demodaten ersetzen',
       demoHelp: 'Demodaten sind fiktiv und klar markiert. Das Laden ersetzt lokale Daten.',
+      demoTitle: 'Lokale Daten durch die Demo ersetzen?',
+      confirmDemo: 'Demodaten laden',
+      restoreTitle: 'Dieses Backup wiederherstellen?',
+      replaceBody: 'Alle aktuellen Aquariendaten werden erst nach der letzten Bestätigung ersetzt.',
+      backupDate: 'Backup erstellt: {{date}}',
+      backupSummary: '{{tanks}} Becken, {{readings}} Messungen, {{lines}} Zuchtlinien',
+      confirmRestore: 'Backup wiederherstellen',
+      reducedMotion: 'Bewegung reduzieren',
       danger: 'Lokale Daten löschen',
       deleteAll: 'Alle lokalen Daten löschen',
       deleteTitle: 'Alle lokalen Daten löschen?',
@@ -551,7 +640,23 @@ const de = {
       nonNegative: 'Gib null oder eine positive Zahl ein.',
       invalidDate: 'Gib ein gültiges Datum ein.',
       minMax: 'Das Minimum darf nicht größer als das Maximum sein.',
-      generic: 'Prüfe die markierten Felder.'
+      generic: 'Prüfe die markierten Felder.',
+      completeDimensions: 'Gib alle drei Maße ein oder lass alle drei Felder leer.',
+      residentSpecies: 'Gib eine Art an, wenn Bewohner oder eine Variante erfasst werden.',
+      completeRange: 'Gib Minimum und Maximum ein oder lass beide Werte leer.',
+      numberRange: 'Gib eine endliche Zahl von {{min}} bis {{max}} ein.',
+      wholeNumber: 'Gib eine ganze Zahl ein.',
+      differentParents: 'Wähle zwei unterschiedliche Elternlinien.'
+    },
+    errors: {
+      storage:
+        'Der lokale Speicher ist nicht verfügbar. Prüfe die Browserberechtigungen und versuche es erneut.',
+      quota: 'Der Browserspeicher ist voll. Exportiere ein Backup, bevor du Speicher freigibst.',
+      editConflict:
+        'Dieser Datensatz wurde in einem anderen Tab geändert oder gelöscht. Dein Entwurf blieb erhalten; lade ihn vor dem Speichern neu.',
+      renderTitle: 'CaridinaKeeper konnte diese Seite nicht anzeigen.',
+      renderBody:
+        'Deine lokalen Daten bleiben gespeichert. Lade die App neu, um es erneut zu versuchen.'
     },
     parameters: {
       temperature: 'Temperatur',
@@ -567,12 +672,11 @@ const de = {
   }
 };
 
-const storedLanguage = localStorage.getItem('caridina-language');
 const detectedLanguage = navigator.language.toLowerCase().startsWith('de') ? 'de' : 'en';
 
 void i18n.use(initReactI18next).init({
   resources: { en, de },
-  lng: storedLanguage === 'de' || storedLanguage === 'en' ? storedLanguage : detectedLanguage,
+  lng: detectedLanguage,
   fallbackLng: 'en',
   interpolation: { escapeValue: false },
   returnNull: false

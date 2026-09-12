@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 import type * as React from 'react';
 import { Activity, Plus, SlidersHorizontal, TriangleAlert } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { ActionForm } from '../components/ui/ActionForm';
+import { parameterLabel } from '../utils/parameterLabel';
 import { Dialog } from '../components/ui/Dialog';
 import { Field, TextInput } from '../components/ui/FormField';
 import { PageHeader } from '../components/ui/PageHeader';
@@ -9,7 +11,7 @@ import { TrendChart } from '../components/ui/TrendChart';
 import { useToast } from '../components/ui/Toast';
 import { evaluateTargetRange } from '../domain/calculations';
 import type { ParameterDefinition } from '../domain/models';
-import { dateTimeInputValue, formatDateTime, formatNumber } from '../utils/format';
+import { dateTimeInputValue, formatDateTime, formatNumber, parseDecimal } from '../utils/format';
 import { useApp } from '../store/AppContext';
 
 export default function WaterPage() {
@@ -22,6 +24,7 @@ export default function WaterPage() {
   const [customDialogOpen, setCustomDialogOpen] = useState(false);
   const [tankFilter, setTankFilter] = useState('');
   const [parameterFilter, setParameterFilter] = useState('');
+  const [visibleCount, setVisibleCount] = useState(20);
   const [draft, setDraft] = useState({
     tankId: tanks[0]?.id ?? '',
     parameterId: parameterDefinitions[0]?.id ?? '',
@@ -41,7 +44,9 @@ export default function WaterPage() {
             (!tankFilter || reading.tankId === tankFilter) &&
             (!parameterFilter || reading.parameterId === parameterFilter)
         )
-        .sort((a, b) => b.measuredAt.localeCompare(a.measuredAt)),
+        .sort(
+          (a, b) => Date.parse(b.measuredAt) - Date.parse(a.measuredAt) || b.id.localeCompare(a.id)
+        ),
     [parameterFilter, tankFilter, waterReadings]
   );
   const trendParameterId = parameterFilter || parameterDefinitions[0]?.id || '';
@@ -50,7 +55,12 @@ export default function WaterPage() {
     (parameter) => parameter.id === trendParameterId
   );
   const trendPoints = filteredReadings
-    .filter((reading) => reading.tankId === trendTankId && reading.parameterId === trendParameterId)
+    .filter(
+      (reading) =>
+        reading.tankId === trendTankId &&
+        reading.parameterId === trendParameterId &&
+        reading.unit === trendParameter?.unit
+    )
     .slice(0, 12)
     .reverse()
     .map((reading) => ({
@@ -61,8 +71,11 @@ export default function WaterPage() {
   const openNew = () => {
     setDraft((current) => ({
       ...current,
-      tankId: tanks[0]?.id ?? current.tankId,
-      parameterId: parameterDefinitions[0]?.id ?? current.parameterId,
+      tankId: tankFilter || tanks[0]?.id || '',
+      parameterId: parameterFilter || parameterDefinitions[0]?.id || '',
+      method: '',
+      uncertainty: '',
+      note: '',
       measuredAt: dateTimeInputValue(),
       value: ''
     }));
@@ -72,14 +85,25 @@ export default function WaterPage() {
     event.preventDefault();
     const parameter = parameterDefinitions.find((item) => item.id === draft.parameterId);
     if (!draft.tankId || !parameter || !draft.value) return;
+    const value = parseDecimal(draft.value);
+    const uncertainty = draft.uncertainty ? parseDecimal(draft.uncertainty) : undefined;
+    const measuredAt = new Date(draft.measuredAt);
+    if (
+      !Number.isFinite(value) ||
+      (uncertainty !== undefined && (!Number.isFinite(uncertainty) || uncertainty < 0)) ||
+      !Number.isFinite(measuredAt.getTime())
+    ) {
+      notify(t('validation.generic'), 'error');
+      return;
+    }
     await addReading({
       tankId: draft.tankId,
       parameterId: draft.parameterId,
-      value: Number(draft.value),
+      value,
       unit: parameter.unit,
-      measuredAt: new Date(draft.measuredAt).toISOString(),
+      measuredAt: measuredAt.toISOString(),
       method: draft.method.trim() || undefined,
-      uncertainty: draft.uncertainty ? Number(draft.uncertainty) : undefined,
+      uncertainty,
       note: draft.note.trim() || undefined
     });
     setDialogOpen(false);
@@ -92,10 +116,11 @@ export default function WaterPage() {
       key: `custom_${customDraft.name
         .trim()
         .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '_')}_${Date.now()}`,
+        .replace(/[^a-z0-9]+/g, '_')
+        .slice(0, 35)}_${Date.now()}`,
       name: customDraft.name.trim(),
       unit: customDraft.unit.trim(),
-      precision: Number(customDraft.precision) || 1,
+      precision: parseDecimal(customDraft.precision),
       sortOrder: 500,
       isBuiltIn: false
     };
@@ -114,12 +139,15 @@ export default function WaterPage() {
             <button
               className="button button--secondary"
               type="button"
-              onClick={() => setCustomDialogOpen(true)}
+              onClick={() => {
+                setCustomDraft({ name: '', unit: '', precision: '1' });
+                setCustomDialogOpen(true);
+              }}
             >
               <SlidersHorizontal size={16} aria-hidden="true" />
               {t('water.customParameter')}
             </button>
-            <button className="button" type="button" onClick={openNew}>
+            <button className="button" type="button" disabled={!tanks.length} onClick={openNew}>
               <Plus size={17} aria-hidden="true" />
               {t('water.add')}
             </button>
@@ -136,7 +164,7 @@ export default function WaterPage() {
         </section>
       ) : (
         <>
-          <section className="card" style={{ marginBottom: '1rem' }}>
+          <section className="card section-gap-bottom">
             <div className="card__body">
               <div className="filter-bar">
                 <Field label={t('common.tank')}>
@@ -144,7 +172,10 @@ export default function WaterPage() {
                     <select
                       id={id}
                       value={tankFilter}
-                      onChange={(event) => setTankFilter(event.target.value)}
+                      onChange={(event) => {
+                        setTankFilter(event.target.value);
+                        setVisibleCount(20);
+                      }}
                     >
                       <option value="">{t('common.all')}</option>
                       {tanks.map((tank) => (
@@ -160,12 +191,15 @@ export default function WaterPage() {
                     <select
                       id={id}
                       value={parameterFilter}
-                      onChange={(event) => setParameterFilter(event.target.value)}
+                      onChange={(event) => {
+                        setParameterFilter(event.target.value);
+                        setVisibleCount(20);
+                      }}
                     >
-                      <option value="">{t('common.all')}</option>
+                      <option value="">{t('water.allParameters')}</option>
                       {parameterDefinitions.map((parameter) => (
                         <option key={parameter.id} value={parameter.id}>
-                          {parameter.name}
+                          {parameterLabel(parameter, t)}
                         </option>
                       ))}
                     </select>
@@ -174,18 +208,21 @@ export default function WaterPage() {
               </div>
             </div>
           </section>
-          <div className="grid grid--two" style={{ marginBottom: '1rem' }}>
+          <div className="grid grid--two section-gap-bottom">
             <section className="card">
               <div className="card__header">
                 <div>
                   <h2>{t('water.trends')}</h2>
-                  <p>{trendParameter?.name ?? t('water.parameter')}</p>
+                  <p>
+                    {tanks.find((tank) => tank.id === trendTankId)?.name} ·{' '}
+                    {parameterLabel(trendParameter, t)}
+                  </p>
                 </div>
               </div>
               <div className="card__body">
                 <TrendChart
                   points={trendPoints}
-                  label={trendParameter?.name ?? ''}
+                  label={parameterLabel(trendParameter, t)}
                   unit={trendParameter?.unit ?? ''}
                   emptyText={t('dashboard.noReadings')}
                 />
@@ -199,7 +236,12 @@ export default function WaterPage() {
                 </div>
               </div>
               <div className="card__body">
-                <div className="table-wrap">
+                <div
+                  className="table-wrap"
+                  tabIndex={0}
+                  role="region"
+                  aria-label={t('water.history')}
+                >
                   <table className="data-table">
                     <thead>
                       <tr>
@@ -211,7 +253,7 @@ export default function WaterPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredReadings.slice(0, 20).map((reading) => {
+                      {filteredReadings.slice(0, visibleCount).map((reading) => {
                         const parameter = parameterDefinitions.find(
                           (item) => item.id === reading.parameterId
                         );
@@ -220,7 +262,9 @@ export default function WaterPage() {
                             item.tankId === reading.tankId &&
                             item.parameterId === reading.parameterId
                         );
-                        const status = range ? evaluateTargetRange(reading.value, range) : null;
+                        const unitMatches = parameter?.unit === reading.unit;
+                        const status =
+                          range && unitMatches ? evaluateTargetRange(reading.value, range) : null;
                         return (
                           <tr key={reading.id}>
                             <td>{formatDateTime(reading.measuredAt, locale)}</td>
@@ -228,7 +272,7 @@ export default function WaterPage() {
                               {tanks.find((tank) => tank.id === reading.tankId)?.name ??
                                 t('common.unknown')}
                             </td>
-                            <td>{parameter?.name ?? reading.parameterId}</td>
+                            <td>{parameterLabel(parameter, t)}</td>
                             <td>
                               <strong>
                                 {formatNumber(reading.value, locale, parameter?.precision ?? 2)}
@@ -236,7 +280,11 @@ export default function WaterPage() {
                               <span className="muted">{reading.unit}</span>
                             </td>
                             <td>
-                              {status ? (
+                              {!unitMatches ? (
+                                <span className="badge badge--neutral">
+                                  {t('water.unitMismatch')}
+                                </span>
+                              ) : status ? (
                                 <span
                                   className={`badge ${status.severity === 'ok' ? 'badge--success' : status.severity === 'critical' ? 'badge--danger' : 'badge--warning'}`}
                                 >
@@ -259,6 +307,18 @@ export default function WaterPage() {
                     </tbody>
                   </table>
                 </div>
+                {filteredReadings.length === 0 ? (
+                  <p className="empty-inline">{t('common.noData')}</p>
+                ) : null}
+                {visibleCount < filteredReadings.length ? (
+                  <button
+                    className="button button--secondary"
+                    type="button"
+                    onClick={() => setVisibleCount((count) => count + 20)}
+                  >
+                    {t('common.showMore')}
+                  </button>
+                ) : null}
               </div>
             </section>
           </div>
@@ -271,7 +331,7 @@ export default function WaterPage() {
         closeLabel={t('common.close')}
         onClose={() => setDialogOpen(false)}
       >
-        <form onSubmit={(event) => void submitReading(event)}>
+        <ActionForm onSubmit={submitReading}>
           <Field label={t('common.tank')} required>
             {({ id }) => (
               <select
@@ -300,7 +360,7 @@ export default function WaterPage() {
               >
                 {parameterDefinitions.map((parameter) => (
                   <option key={parameter.id} value={parameter.id}>
-                    {parameter.name} · {parameter.unit}
+                    {parameterLabel(parameter, t)} · {parameter.unit}
                   </option>
                 ))}
               </select>
@@ -349,6 +409,7 @@ export default function WaterPage() {
             <Field label={t('common.note')}>
               {({ id }) => (
                 <textarea
+                  maxLength={2000}
                   id={id}
                   placeholder={t('water.notePlaceholder')}
                   value={draft.note}
@@ -371,7 +432,7 @@ export default function WaterPage() {
               {t('common.save')}
             </button>
           </div>
-        </form>
+        </ActionForm>
       </Dialog>
       <Dialog
         open={customDialogOpen}
@@ -379,7 +440,7 @@ export default function WaterPage() {
         closeLabel={t('common.close')}
         onClose={() => setCustomDialogOpen(false)}
       >
-        <form onSubmit={(event) => void submitCustom(event)}>
+        <ActionForm onSubmit={submitCustom}>
           <TextInput
             label={t('water.parameterName')}
             required
@@ -390,6 +451,7 @@ export default function WaterPage() {
           />
           <TextInput
             label={t('water.defaultUnit')}
+            maxLength={32}
             required
             value={customDraft.unit}
             onChange={(event) =>
@@ -397,10 +459,12 @@ export default function WaterPage() {
             }
           />
           <TextInput
-            label="Precision"
+            label={t('water.precision')}
             type="number"
             min="0"
             max="6"
+            step="1"
+            required
             value={customDraft.precision}
             onChange={(event) =>
               setCustomDraft((current) => ({ ...current, precision: event.target.value }))
@@ -418,7 +482,7 @@ export default function WaterPage() {
               {t('common.save')}
             </button>
           </div>
-        </form>
+        </ActionForm>
       </Dialog>
     </>
   );

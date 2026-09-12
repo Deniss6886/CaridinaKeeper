@@ -11,8 +11,8 @@ import {
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { PageHeader } from '../components/ui/PageHeader';
+import { DemoDialog } from '../components/ui/DemoDialog';
 import { TrendChart } from '../components/ui/TrendChart';
-import { useToast } from '../components/ui/Toast';
 import { useApp } from '../store/AppContext';
 import {
   collectParameterWarnings,
@@ -31,10 +31,9 @@ export default function DashboardPage() {
     targetRanges,
     reminders,
     breedingEvents,
-    loadDemo,
     loading
   } = useApp();
-  const { notify } = useToast();
+  const [demoDialog, setDemoDialog] = useState(false);
   const [trendTankId, setTrendTankId] = useState('');
   const [trendParameterId, setTrendParameterId] = useState('');
 
@@ -46,7 +45,7 @@ export default function DashboardPage() {
     () =>
       reminders
         .filter((reminder) => isReminderDue(reminder))
-        .sort((a, b) => a.dueAt.localeCompare(b.dueAt)),
+        .sort((a, b) => Date.parse(a.dueAt) - Date.parse(b.dueAt) || a.id.localeCompare(b.id)),
     [reminders]
   );
   const latest = useMemo(() => latestReadingsByTankAndParameter(waterReadings), [waterReadings]);
@@ -60,15 +59,20 @@ export default function DashboardPage() {
     () =>
       waterReadings
         .filter(
-          (reading) => reading.tankId === activeTankId && reading.parameterId === activeParameterId
+          (reading) =>
+            reading.tankId === activeTankId &&
+            reading.parameterId === activeParameterId &&
+            reading.unit === trendParameter?.unit
         )
-        .sort((a, b) => a.measuredAt.localeCompare(b.measuredAt))
+        .sort(
+          (a, b) => Date.parse(a.measuredAt) - Date.parse(b.measuredAt) || a.id.localeCompare(b.id)
+        )
         .slice(-12)
         .map((reading) => ({
           label: formatDate(reading.measuredAt, locale),
           value: reading.value
         })),
-    [activeParameterId, activeTankId, locale, waterReadings]
+    [activeParameterId, activeTankId, locale, trendParameter?.unit, waterReadings]
   );
   const [now] = useState(() => Date.now());
   const activityCutoff = now - 30 * 86_400_000;
@@ -76,7 +80,7 @@ export default function DashboardPage() {
     (event) => Date.parse(event.occurredAt) >= activityCutoff
   ).length;
   const recentReadings = [...waterReadings]
-    .sort((a, b) => b.measuredAt.localeCompare(a.measuredAt))
+    .sort((a, b) => Date.parse(b.measuredAt) - Date.parse(a.measuredAt) || b.id.localeCompare(a.id))
     .slice(0, 6);
   const tankWarningCount = (tankId: string) =>
     warnings.filter((warning) => warning.reading.tankId === tankId).length;
@@ -110,12 +114,13 @@ export default function DashboardPage() {
             <button
               className="button button--secondary"
               type="button"
-              onClick={() => void loadDemo().then(() => notify(t('settings.demoData')))}
+              onClick={() => setDemoDialog(true)}
             >
               {t('dashboard.loadDemo')}
             </button>
           </div>
         </section>
+        <DemoDialog open={demoDialog} onClose={() => setDemoDialog(false)} />
       </>
     );
   }
@@ -151,7 +156,7 @@ export default function DashboardPage() {
             <AlertTriangle size={14} aria-hidden="true" />
             {warnings.length
               ? t('tanks.attention', { count: warnings.length })
-              : t('dashboard.noAlerts')}
+              : t('dashboard.stable')}
           </span>
         </article>
         <article className="card stat-card stat-card--accent">
@@ -187,6 +192,7 @@ export default function DashboardPage() {
             <div className="grid grid--three">
               {tanks.map((tank) => {
                 const count = tankWarningCount(tank.id);
+                const hasTargets = targetRanges.some((range) => range.tankId === tank.id);
                 const soilAge = daysSince(tank.soilInstalledAt);
                 const first = [...latest.values()].find((reading) => reading.tankId === tank.id);
                 const firstParameter = parameterDefinitions.find(
@@ -209,13 +215,19 @@ export default function DashboardPage() {
                       </div>
                       {tank.isDemo ? <span className="demo-badge">{t('common.demo')}</span> : null}
                     </div>
-                    <span className={`badge ${count ? 'badge--warning' : 'badge--success'}`}>
+                    <span
+                      className={`badge ${count ? 'badge--warning' : hasTargets ? 'badge--success' : 'badge--neutral'}`}
+                    >
                       {count ? (
                         <AlertTriangle size={12} aria-hidden="true" />
-                      ) : (
+                      ) : hasTargets ? (
                         <CheckCircle2 size={12} aria-hidden="true" />
-                      )}
-                      {count ? t('tanks.attention', { count }) : t('tanks.stable')}
+                      ) : null}
+                      {count
+                        ? t('tanks.attention', { count })
+                        : hasTargets
+                          ? t('tanks.stable')
+                          : t('tanks.noTargets')}
                     </span>
                     <div className="tank-card__metrics">
                       {first && firstParameter ? (
@@ -271,14 +283,14 @@ export default function DashboardPage() {
         </section>
       </div>
 
-      <div className="dashboard-grid dashboard-grid--wide" style={{ marginTop: '1rem' }}>
+      <div className="dashboard-grid dashboard-grid--wide section-gap">
         <section className="card" aria-labelledby="trend-title">
           <div className="card__header">
             <div>
               <h2 id="trend-title">{t('dashboard.trend')}</h2>
               <p>{t('dashboard.trendHint')}</p>
             </div>
-            <div className="filter-bar" style={{ marginBottom: 0 }}>
+            <div className="filter-bar filter-bar--flush">
               <label className="visually-hidden" htmlFor="trend-tank">
                 {t('common.tank')}
               </label>
@@ -360,7 +372,7 @@ export default function DashboardPage() {
           </div>
         </section>
       </div>
-      <div className="notice" style={{ marginTop: '1rem' }}>
+      <div className="notice section-gap">
         <Droplets size={17} aria-hidden="true" />
         <span>{t('water.scientificNote')}</span>
       </div>

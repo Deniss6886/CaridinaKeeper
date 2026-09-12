@@ -2,12 +2,19 @@ import { useMemo, useState } from 'react';
 import type * as React from 'react';
 import { CalendarClock, CheckCircle2, Droplets, Plus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { ActionForm } from '../components/ui/ActionForm';
 import { Dialog } from '../components/ui/Dialog';
 import { Field, TextInput } from '../components/ui/FormField';
 import { PageHeader } from '../components/ui/PageHeader';
 import { useToast } from '../components/ui/Toast';
 import type { MaintenanceEventType, ReminderRepeat } from '../domain/models';
-import { dateInputValue, formatDate, formatDateTime } from '../utils/format';
+import {
+  dateInputValue,
+  formatDate,
+  formatNumber,
+  localDayToIso,
+  parseDecimal
+} from '../utils/format';
 import { isReminderDue } from '../domain/calculations';
 import { useApp } from '../store/AppContext';
 
@@ -21,7 +28,7 @@ const careTypes: MaintenanceEventType[] = [
   'additive',
   'other'
 ];
-const repeats: ReminderRepeat[] = ['none', 'daily', 'weekly', 'monthly'];
+const repeats: ReminderRepeat[] = ['none', 'daily', 'weekly', 'monthly', 'quarterly', 'yearly'];
 
 export default function CarePage() {
   const { t, i18n } = useTranslation();
@@ -30,6 +37,7 @@ export default function CarePage() {
     useApp();
   const { notify } = useToast();
   const [maintenanceDialog, setMaintenanceDialog] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(12);
   const [reminderDialog, setReminderDialog] = useState(false);
   const [maintenanceDraft, setMaintenanceDraft] = useState({
     tankId: tanks[0]?.id ?? '',
@@ -50,22 +58,28 @@ export default function CarePage() {
   const openReminders = useMemo(
     () =>
       [...reminders].sort(
-        (a, b) => Number(a.completed) - Number(b.completed) || a.dueAt.localeCompare(b.dueAt)
+        (a, b) =>
+          Number(a.completed) - Number(b.completed) ||
+          Date.parse(a.dueAt) - Date.parse(b.dueAt) ||
+          a.id.localeCompare(b.id)
       ),
     [reminders]
   );
 
   const saveMaintenance = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!maintenanceDraft.tankId) return;
+    if (!maintenanceDraft.tankId) {
+      notify(t('tanks.emptyBody'), 'error');
+      return;
+    }
     await addMaintenance({
       tankId: maintenanceDraft.tankId,
       type: maintenanceDraft.type,
-      performedAt: new Date(maintenanceDraft.performedAt).toISOString(),
-      amount: maintenanceDraft.amount ? Number(maintenanceDraft.amount) : undefined,
+      performedAt: localDayToIso(maintenanceDraft.performedAt),
+      amount: maintenanceDraft.amount ? parseDecimal(maintenanceDraft.amount) : undefined,
       unit: maintenanceDraft.unit || undefined,
       waterChangePercent: maintenanceDraft.waterChangePercent
-        ? Number(maintenanceDraft.waterChangePercent)
+        ? parseDecimal(maintenanceDraft.waterChangePercent)
         : undefined,
       note: maintenanceDraft.note.trim() || undefined
     });
@@ -79,7 +93,7 @@ export default function CarePage() {
       tankId: reminderDraft.tankId || undefined,
       title: reminderDraft.title.trim(),
       description: reminderDraft.description.trim() || undefined,
-      dueAt: new Date(reminderDraft.dueAt).toISOString(),
+      dueAt: localDayToIso(reminderDraft.dueAt),
       repeat: reminderDraft.repeat,
       completed: false
     });
@@ -97,12 +111,37 @@ export default function CarePage() {
             <button
               className="button button--secondary"
               type="button"
-              onClick={() => setReminderDialog(true)}
+              onClick={() => {
+                setReminderDraft({
+                  tankId: tanks[0]?.id ?? '',
+                  title: '',
+                  description: '',
+                  dueAt: dateInputValue(),
+                  repeat: 'none'
+                });
+                setReminderDialog(true);
+              }}
             >
               <CalendarClock size={16} aria-hidden="true" />
               {t('care.addReminder')}
             </button>
-            <button className="button" type="button" onClick={() => setMaintenanceDialog(true)}>
+            <button
+              className="button"
+              type="button"
+              disabled={!tanks.length}
+              onClick={() => {
+                setMaintenanceDraft({
+                  tankId: tanks[0]?.id ?? '',
+                  type: 'water_change',
+                  performedAt: dateInputValue(),
+                  amount: '',
+                  unit: 'L',
+                  waterChangePercent: '',
+                  note: ''
+                });
+                setMaintenanceDialog(true);
+              }}
+            >
               <Plus size={17} aria-hidden="true" />
               {t('care.addMaintenance')}
             </button>
@@ -119,7 +158,16 @@ export default function CarePage() {
             <button
               className="button button--small"
               type="button"
-              onClick={() => setReminderDialog(true)}
+              onClick={() => {
+                setReminderDraft({
+                  tankId: tanks[0]?.id ?? '',
+                  title: '',
+                  description: '',
+                  dueAt: dateInputValue(),
+                  repeat: 'none'
+                });
+                setReminderDialog(true);
+              }}
             >
               <Plus size={15} aria-hidden="true" />
               {t('care.addReminder')}
@@ -129,6 +177,7 @@ export default function CarePage() {
             <div className="list">
               {openReminders.map((reminder) => {
                 const due = isReminderDue(reminder);
+                const dueToday = dateInputValue(new Date(reminder.dueAt)) === dateInputValue();
                 return (
                   <div
                     className={`list-row ${reminder.completed ? 'list-row--completed' : ''}`}
@@ -138,7 +187,11 @@ export default function CarePage() {
                       className="checkbox-button"
                       type="button"
                       aria-label={reminder.completed ? t('care.reopen') : t('care.complete')}
-                      onClick={() => void toggleReminder(reminder.id, !reminder.completed)}
+                      onClick={() =>
+                        void toggleReminder(reminder.id, !reminder.completed).catch(() =>
+                          notify(t('common.actionFailed'), 'error')
+                        )
+                      }
                     >
                       {reminder.completed ? (
                         <CheckCircle2 size={19} aria-hidden="true" />
@@ -159,7 +212,9 @@ export default function CarePage() {
                       {reminder.completed
                         ? t('common.completed')
                         : due
-                          ? t('common.overdue')
+                          ? dueToday
+                            ? t('common.today')
+                            : t('common.overdue')
                           : formatDate(reminder.dueAt, locale)}
                     </span>
                   </div>
@@ -183,7 +238,19 @@ export default function CarePage() {
             <button
               className="button button--small"
               type="button"
-              onClick={() => setMaintenanceDialog(true)}
+              disabled={!tanks.length}
+              onClick={() => {
+                setMaintenanceDraft({
+                  tankId: tanks[0]?.id ?? '',
+                  type: 'water_change',
+                  performedAt: dateInputValue(),
+                  amount: '',
+                  unit: 'L',
+                  waterChangePercent: '',
+                  note: ''
+                });
+                setMaintenanceDialog(true);
+              }}
             >
               <Plus size={15} aria-hidden="true" />
               {t('care.addMaintenance')}
@@ -192,8 +259,12 @@ export default function CarePage() {
           <div className="card__body">
             <div className="timeline">
               {[...maintenanceEvents]
-                .sort((a, b) => b.performedAt.localeCompare(a.performedAt))
-                .slice(0, 12)
+                .sort(
+                  (a, b) =>
+                    Date.parse(b.performedAt) - Date.parse(a.performedAt) ||
+                    b.id.localeCompare(a.id)
+                )
+                .slice(0, visibleCount)
                 .map((item) => (
                   <div className="timeline__item" key={item.id}>
                     <div className="timeline__rail">
@@ -203,15 +274,30 @@ export default function CarePage() {
                       <strong>{t(`care.types.${item.type}`)}</strong>
                       <span>
                         {tanks.find((tank) => tank.id === item.tankId)?.name ?? t('common.unknown')}{' '}
-                        {item.amount ? `· ${item.amount} ${item.unit ?? ''}` : ''} {item.note ?? ''}
+                        {item.amount !== undefined
+                          ? `· ${formatNumber(item.amount, locale)} ${item.unit ?? ''}`
+                          : ''}{' '}
+                        {item.waterChangePercent !== undefined
+                          ? `· ${formatNumber(item.waterChangePercent, locale)} %`
+                          : ''}{' '}
+                        {item.note ?? ''}
                       </span>
                       <time dateTime={item.performedAt}>
-                        {formatDateTime(item.performedAt, locale)}
+                        {formatDate(item.performedAt, locale)}
                       </time>
                     </div>
                   </div>
                 ))}
             </div>
+            {visibleCount < maintenanceEvents.length ? (
+              <button
+                className="button button--secondary"
+                type="button"
+                onClick={() => setVisibleCount((count) => count + 12)}
+              >
+                {t('common.showMore')}
+              </button>
+            ) : null}
             {maintenanceEvents.length === 0 ? (
               <div className="empty-inline">
                 <Droplets size={18} aria-hidden="true" />
@@ -227,7 +313,7 @@ export default function CarePage() {
         closeLabel={t('common.close')}
         onClose={() => setMaintenanceDialog(false)}
       >
-        <form onSubmit={(event) => void saveMaintenance(event)}>
+        <ActionForm onSubmit={saveMaintenance}>
           <Field label={t('common.tank')} required>
             {({ id }) => (
               <select
@@ -287,13 +373,14 @@ export default function CarePage() {
             />
             <TextInput
               label={t('common.unit')}
+              maxLength={32}
               value={maintenanceDraft.unit}
               onChange={(event) =>
                 setMaintenanceDraft((current) => ({ ...current, unit: event.target.value }))
               }
             />
             <TextInput
-              label="%"
+              label={t('care.waterChangePercent')}
               type="number"
               min="0"
               max="100"
@@ -308,6 +395,7 @@ export default function CarePage() {
             <Field label={t('common.note')}>
               {({ id }) => (
                 <textarea
+                  maxLength={2000}
                   id={id}
                   value={maintenanceDraft.note}
                   onChange={(event) =>
@@ -329,7 +417,7 @@ export default function CarePage() {
               {t('common.save')}
             </button>
           </div>
-        </form>
+        </ActionForm>
       </Dialog>
       <Dialog
         open={reminderDialog}
@@ -337,7 +425,7 @@ export default function CarePage() {
         closeLabel={t('common.close')}
         onClose={() => setReminderDialog(false)}
       >
-        <form onSubmit={(event) => void saveReminder(event)}>
+        <ActionForm onSubmit={saveReminder}>
           <TextInput
             label={t('care.titleLabel')}
             required
@@ -398,6 +486,7 @@ export default function CarePage() {
           <Field label={t('common.note')}>
             {({ id }) => (
               <textarea
+                maxLength={2000}
                 id={id}
                 value={reminderDraft.description}
                 onChange={(event) =>
@@ -418,7 +507,7 @@ export default function CarePage() {
               {t('common.save')}
             </button>
           </div>
-        </form>
+        </ActionForm>
       </Dialog>
     </>
   );

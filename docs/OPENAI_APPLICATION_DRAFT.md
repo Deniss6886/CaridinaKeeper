@@ -2,7 +2,7 @@
 
 **Project:** CaridinaKeeper – privacy-first, offline-first open-source aquarium and Caridina breeding notebook.
 
-**Repository:** `https://github.com/Deniss6886/CaridinaKeeper` (replace with the verified public URL after publication).
+**Repository:** `https://github.com/Deniss6886/CaridinaKeeper`.
 
 **Role:** Maintainer / primary contributor.
 
@@ -10,4 +10,4 @@
 
 **Why Codex would help:** A reviewed Codex workflow could accelerate accessibility and browser compatibility fixes, schema-safe migrations, evidence provenance, and read-only Home Assistant import while preserving local-first privacy. Every generated change would run the repository check suite and receive maintainer review before release.
 
-**Evidence note:** Replace this section with verified public maintenance/adoption evidence only. Do not submit placeholder numbers or imply that a preview has broad adoption.
+**Evidence note:** Do not submit this draft now. Add only verified public maintenance/adoption evidence; do not use placeholder numbers or imply that this preview has broad adoption.

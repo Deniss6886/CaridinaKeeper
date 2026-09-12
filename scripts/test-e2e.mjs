@@ -2,8 +2,9 @@ import { spawnSync } from 'node:child_process';
 
 const node = process.execPath;
 const steps = [
+  ['node_modules/typescript/bin/tsc', ['-b', '--pretty', 'false']],
   ['node_modules/vite/bin/vite.js', ['build']],
-  ['node_modules/@playwright/test/cli.js', ['test']]
+  ['node_modules/@playwright/test/cli.js', ['test', ...process.argv.slice(2)]]
 ];
 
 for (const [entry, args] of steps) {

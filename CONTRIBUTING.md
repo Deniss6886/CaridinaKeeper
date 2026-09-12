@@ -17,7 +17,7 @@ npm run check
 npm run test:e2e
 ```
 
-Use small commits, avoid committing real backups or sensor endpoints, and include screenshots for responsive UI changes. The default branch is protected in the hosted repository; pull requests must pass CI.
+Use small commits, avoid committing real backups or sensor endpoints, and include screenshots for responsive UI changes. Pull requests must pass CI; repository rules should require those checks before merging where the hosting plan supports them.
 
 ## Pull requests
 

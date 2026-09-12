@@ -13,19 +13,28 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Dialog } from '../components/ui/Dialog';
+import { ActionForm } from '../components/ui/ActionForm';
+import { DemoDialog } from '../components/ui/DemoDialog';
+import { validateBackup } from '../data/backup';
+import type { BackupSchema } from '../domain/models';
 import { PageHeader } from '../components/ui/PageHeader';
 import { useToast } from '../components/ui/Toast';
 import { useApp } from '../store/AppContext';
-import { downloadText } from '../utils/format';
+import { dateInputValue, downloadText, formatDateTime } from '../utils/format';
 
 export default function SettingsPage() {
   const { t, i18n } = useTranslation();
-  const { settings, exportBackup, exportCsv, importBackup, loadDemo, deleteAll, updateSettings } =
-    useApp();
+  const { settings, exportBackup, exportCsv, importBackup, deleteAll, updateSettings } = useApp();
   const { notify } = useToast();
   const settingsRecord = settings[0];
   const importRef = useRef<HTMLInputElement>(null);
   const [deleteDialog, setDeleteDialog] = useState(false);
+  const [demoDialog, setDemoDialog] = useState(false);
+  const [restore, setRestore] = useState<{
+    name: string;
+    text: string;
+    backup: BackupSchema;
+  } | null>(null);
   const [persistenceState, setPersistenceState] = useState<'idle' | 'granted' | 'denied'>('idle');
 
   const setTheme = async (theme: 'light' | 'dark' | 'system') => {
@@ -34,16 +43,12 @@ export default function SettingsPage() {
 
   const handleExportJson = async () => {
     const content = await exportBackup();
-    downloadText(
-      `caridinakeeper-backup-${new Date().toISOString().slice(0, 10)}.json`,
-      content,
-      'application/json'
-    );
+    downloadText(`caridinakeeper-backup-${dateInputValue()}.json`, content, 'application/json');
     notify(t('settings.exported'));
   };
   const handleExportCsv = () => {
     downloadText(
-      `caridinakeeper-water-${new Date().toISOString().slice(0, 10)}.csv`,
+      `caridinakeeper-water-${dateInputValue()}.csv`,
       exportCsv(),
       'text/csv;charset=utf-8'
     );
@@ -58,15 +63,12 @@ export default function SettingsPage() {
       return;
     }
     try {
-      await importBackup(await file.text());
-      notify(t('settings.imported'));
+      const text = new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer());
+      const backup = validateBackup(text);
+      setRestore({ name: file.name, text, backup });
     } catch {
       notify(t('settings.invalidBackup'), 'error');
     }
-  };
-  const handleDemo = async () => {
-    await loadDemo();
-    notify(t('settings.demoData'));
   };
   const handleDelete = async () => {
     await deleteAll();
@@ -81,9 +83,14 @@ export default function SettingsPage() {
     setPersistenceState((await navigator.storage.persist()) ? 'granted' : 'denied');
   };
   const changeLanguage = async (language: 'en' | 'de') => {
-    await i18n.changeLanguage(language);
-    localStorage.setItem('caridina-language', language);
     await updateSettings({ locale: language });
+  };
+  const run = async (action: () => Promise<void> | void) => {
+    try {
+      await action();
+    } catch {
+      notify(t('common.actionFailed'), 'error');
+    }
   };
 
   return (
@@ -107,7 +114,8 @@ export default function SettingsPage() {
                     ? 'theme-picker__item theme-picker__item--active'
                     : 'theme-picker__item'
                 }
-                onClick={() => void setTheme('light')}
+                aria-pressed={settingsRecord?.theme === 'light'}
+                onClick={() => void run(() => setTheme('light'))}
               >
                 <Sun size={17} aria-hidden="true" />
                 {t('settings.light')}
@@ -119,7 +127,8 @@ export default function SettingsPage() {
                     ? 'theme-picker__item theme-picker__item--active'
                     : 'theme-picker__item'
                 }
-                onClick={() => void setTheme('dark')}
+                aria-pressed={settingsRecord?.theme === 'dark'}
+                onClick={() => void run(() => setTheme('dark'))}
               >
                 <Moon size={17} aria-hidden="true" />
                 {t('settings.dark')}
@@ -131,7 +140,8 @@ export default function SettingsPage() {
                     ? 'theme-picker__item theme-picker__item--active'
                     : 'theme-picker__item'
                 }
-                onClick={() => void setTheme('system')}
+                aria-pressed={settingsRecord?.theme === 'system'}
+                onClick={() => void run(() => setTheme('system'))}
               >
                 {t('settings.system')}
               </button>
@@ -142,12 +152,24 @@ export default function SettingsPage() {
               <select
                 id="language"
                 value={i18n.language.startsWith('de') ? 'de' : 'en'}
-                onChange={(event) => void changeLanguage(event.target.value as 'en' | 'de')}
+                onChange={(event) =>
+                  void run(() => changeLanguage(event.target.value as 'en' | 'de'))
+                }
               >
                 <option value="en">{t('settings.english')}</option>
                 <option value="de">{t('settings.german')}</option>
               </select>
             </div>
+            <label className="preference-row">
+              <input
+                type="checkbox"
+                checked={settingsRecord?.reducedMotion ?? false}
+                onChange={(event) =>
+                  void run(() => updateSettings({ reducedMotion: event.target.checked }))
+                }
+              />
+              <span>{t('settings.reducedMotion')}</span>
+            </label>
           </div>
         </section>
         <section className="card">
@@ -167,7 +189,7 @@ export default function SettingsPage() {
               <button
                 className="button button--secondary"
                 type="button"
-                onClick={() => void requestPersistence()}
+                onClick={() => void run(requestPersistence)}
               >
                 {persistenceState === 'granted'
                   ? t('settings.persistentGranted')
@@ -189,11 +211,15 @@ export default function SettingsPage() {
           </div>
           <div className="card__body">
             <div className="settings-actions">
-              <button className="button" type="button" onClick={() => void handleExportJson()}>
+              <button className="button" type="button" onClick={() => void run(handleExportJson)}>
                 <Download size={16} aria-hidden="true" />
                 {t('settings.exportJson')}
               </button>
-              <button className="button button--secondary" type="button" onClick={handleExportCsv}>
+              <button
+                className="button button--secondary"
+                type="button"
+                onClick={() => void run(handleExportCsv)}
+              >
                 <Download size={16} aria-hidden="true" />
                 {t('settings.exportCsv')}
               </button>
@@ -209,6 +235,7 @@ export default function SettingsPage() {
                 ref={importRef}
                 className="visually-hidden"
                 type="file"
+                aria-label={t('settings.importJson')}
                 accept="application/json,.json"
                 onChange={(event) => void handleImport(event)}
               />
@@ -227,7 +254,7 @@ export default function SettingsPage() {
             <button
               className="button button--secondary"
               type="button"
-              onClick={() => void handleDemo()}
+              onClick={() => setDemoDialog(true)}
             >
               {t('settings.loadDemo')}
             </button>
@@ -260,22 +287,77 @@ export default function SettingsPage() {
         closeLabel={t('common.close')}
         onClose={() => setDeleteDialog(false)}
       >
-        <div className="card__footer">
-          <button
-            className="button button--secondary"
-            type="button"
-            onClick={() => setDeleteDialog(false)}
-          >
-            {t('common.cancel')}
-          </button>
-          <button
-            className="button button--danger"
-            type="button"
-            onClick={() => void handleDelete()}
-          >
-            {t('common.delete')}
-          </button>
-        </div>
+        <ActionForm onSubmit={handleDelete}>
+          <div className="card__footer">
+            <button
+              className="button button--secondary"
+              type="button"
+              onClick={() => setDeleteDialog(false)}
+            >
+              {t('common.cancel')}
+            </button>
+            <button className="button button--danger" type="submit">
+              {t('common.delete')}
+            </button>
+          </div>
+        </ActionForm>
+      </Dialog>
+      <DemoDialog open={demoDialog} onClose={() => setDemoDialog(false)} />
+      <Dialog
+        open={Boolean(restore)}
+        title={t('settings.restoreTitle')}
+        description={t('settings.replaceBody')}
+        closeLabel={t('common.close')}
+        onClose={() => setRestore(null)}
+      >
+        {restore ? (
+          <>
+            <p className="backup-filename">{restore.name}</p>
+            <p>
+              {t('settings.backupDate', {
+                date: formatDateTime(restore.backup.exportedAt, i18n.language)
+              })}
+            </p>
+            <dl className="backup-summary">
+              {(
+                [
+                  ['tanks', 'tanks.title'],
+                  ['waterReadings', 'water.title'],
+                  ['breedingLines', 'breeding.lines'],
+                  ['breedingEvents', 'breeding.events'],
+                  ['crosses', 'breeding.crosses'],
+                  ['maintenanceEvents', 'care.maintenance'],
+                  ['reminders', 'care.reminders']
+                ] as const
+              ).map(([table, label]) => (
+                <div key={table}>
+                  <dt>{t(label)}</dt>
+                  <dd>{restore.backup.data[table].length}</dd>
+                </div>
+              ))}
+            </dl>
+            <ActionForm
+              onSubmit={async () => {
+                await importBackup(restore.text);
+                setRestore(null);
+                notify(t('settings.imported'));
+              }}
+            >
+              <div className="card__footer">
+                <button
+                  className="button button--secondary"
+                  type="button"
+                  onClick={() => setRestore(null)}
+                >
+                  {t('common.cancel')}
+                </button>
+                <button className="button button--danger" type="submit">
+                  {t('settings.confirmRestore')}
+                </button>
+              </div>
+            </ActionForm>
+          </>
+        ) : null}
       </Dialog>
     </>
   );

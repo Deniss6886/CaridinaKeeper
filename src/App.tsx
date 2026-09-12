@@ -1,4 +1,14 @@
-import { lazy, Suspense, useEffect, useMemo, useState, type ComponentType } from 'react';
+import {
+  Component,
+  lazy,
+  Suspense,
+  useEffect,
+  useMemo,
+  useState,
+  type ComponentType,
+  type ErrorInfo,
+  type ReactNode
+} from 'react';
 import { HashRouter, NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import {
   BarChart3,
@@ -8,17 +18,18 @@ import {
   ChevronRight,
   CircleHelp,
   Droplets,
-  Menu,
   Moon,
   Settings,
   Shrimp,
   Sun,
-  X
+  Wifi,
+  WifiOff
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useRegisterSW } from 'virtual:pwa-register/react';
-import { AppProvider, useApp } from './store/AppContext';
+import packageJson from '../package.json';
 import { ToastProvider, useToast } from './components/ui/Toast';
+import { AppProvider, useApp } from './store/AppContext';
 
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const TanksPage = lazy(() => import('./pages/TanksPage'));
@@ -42,29 +53,86 @@ const navigation: Array<{ to: string; key: string; icon: IconComponent }> = [
   { to: '/settings', key: 'settings', icon: Settings }
 ];
 
+class AppErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    if (import.meta.env.DEV) console.error(error, info.componentStack);
+  }
+
+  render() {
+    return this.state.failed ? <CrashFallback /> : this.props.children;
+  }
+}
+
+function CrashFallback() {
+  const { t } = useTranslation();
+  return (
+    <main className="fatal-error" role="alert">
+      <h1>{t('errors.renderTitle')}</h1>
+      <p>{t('errors.renderBody')}</p>
+      <button className="button" type="button" onClick={() => window.location.reload()}>
+        {t('common.reload')}
+      </button>
+    </main>
+  );
+}
+
 function UpdatePrompt() {
   const { t } = useTranslation();
-  const [show, setShow] = useState(false);
-  const { updateServiceWorker } = useRegisterSW({
-    onNeedRefresh() {
-      setShow(true);
+  const { notify } = useToast();
+  const [registration, setRegistration] = useState<ServiceWorkerRegistration>();
+  const {
+    needRefresh: [needRefresh, setNeedRefresh],
+    updateServiceWorker
+  } = useRegisterSW({
+    onOfflineReady() {
+      notify(t('app.offlineReady'));
+    },
+    onRegisteredSW(_url, nextRegistration) {
+      if (nextRegistration) setRegistration(nextRegistration);
+    },
+    onRegisterError() {
+      notify(t('app.offlineError'), 'error');
     }
   });
-  if (!show) return null;
+
+  useEffect(() => {
+    if (!registration) return;
+    const check = () => {
+      if (navigator.onLine) void registration.update();
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') check();
+    };
+    const interval = window.setInterval(check, 60 * 60 * 1000);
+    window.addEventListener('online', check);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('online', check);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [registration]);
+
+  if (!needRefresh) return null;
+  const applyUpdate = () => {
+    if (window.confirm(t('app.updateConfirm'))) void updateServiceWorker(true);
+  };
   return (
     <div className="update-banner" role="status">
       <span>{t('app.updateReady')}</span>
-      <button
-        className="button button--small"
-        type="button"
-        onClick={() => void updateServiceWorker(true)}
-      >
+      <button className="button button--small" type="button" onClick={applyUpdate}>
         {t('app.update')}
       </button>
       <button
         className="button button--ghost button--small"
         type="button"
-        onClick={() => setShow(false)}
+        onClick={() => setNeedRefresh(false)}
       >
         {t('app.later')}
       </button>
@@ -74,68 +142,90 @@ function UpdatePrompt() {
 
 function ThemeSync() {
   const { settings } = useApp();
+  const { i18n } = useTranslation();
+  const locale = settings[0]?.locale ?? 'en';
+  const theme = settings[0]?.theme ?? 'system';
+  const reducedMotion = settings[0]?.reducedMotion ?? false;
+
   useEffect(() => {
-    const theme = settings[0]?.theme ?? 'system';
-    const root = document.documentElement;
-    const resolved =
-      theme === 'system'
-        ? matchMedia('(prefers-color-scheme: dark)').matches
-          ? 'dark'
-          : 'light'
-        : theme;
-    root.dataset.theme = resolved;
-  }, [settings]);
+    void i18n.changeLanguage(locale);
+    document.documentElement.lang = locale;
+  }, [i18n, locale]);
+
+  useEffect(() => {
+    const query = window.matchMedia('(prefers-color-scheme: dark)');
+    const apply = () => {
+      document.documentElement.dataset.theme =
+        theme === 'system' ? (query.matches ? 'dark' : 'light') : theme;
+    };
+    apply();
+    if (theme !== 'system') return;
+    query.addEventListener('change', apply);
+    return () => query.removeEventListener('change', apply);
+  }, [theme]);
+
+  useEffect(() => {
+    document.documentElement.toggleAttribute('data-reduced-motion', reducedMotion);
+  }, [reducedMotion]);
+
   return null;
 }
 
 function Shell() {
   const { t } = useTranslation();
-  const { settings, updateSettings } = useApp();
+  const { settings, updateSettings, loading, error } = useApp();
   const location = useLocation();
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [online, setOnline] = useState(() => navigator.onLine);
   const { notify } = useToast();
   const locale = settings[0]?.locale ?? 'en';
+  const theme = settings[0]?.theme ?? 'system';
   const currentTitle = useMemo(() => {
     const item = navigation.find((entry) => entry.to === location.pathname);
     return item ? t(`nav.${item.key}`) : t('app.name');
   }, [location.pathname, t]);
 
   useEffect(() => {
-    setMenuOpen(false);
-  }, [location.pathname]);
-
-  useEffect(() => {
-    const onOnline = () => notify(t('app.offlineReady'));
+    const onOnline = () => {
+      setOnline(true);
+      notify(t('app.online'));
+    };
+    const onOffline = () => {
+      setOnline(false);
+      notify(t('app.offline'));
+    };
     window.addEventListener('online', onOnline);
-    return () => window.removeEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
   }, [notify, t]);
 
-  const theme = settings[0]?.theme ?? 'system';
   const toggleTheme = async () => {
-    const next = theme === 'dark' ? 'light' : 'dark';
-    await updateSettings({ theme: next });
+    const systemIsDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const currentlyDark = theme === 'dark' || (theme === 'system' && systemIsDark);
+    await updateSettings({ theme: currentlyDark ? 'light' : 'dark' });
   };
 
   return (
     <div className="app-shell">
-      <aside
-        className={`sidebar ${menuOpen ? 'sidebar--open' : ''}`}
-        aria-label={t('nav.openMenu')}
+      <a
+        className="skip-link"
+        href="#main-content"
+        onClick={(event) => {
+          event.preventDefault();
+          document.getElementById('main-content')?.focus();
+        }}
       >
+        {t('common.skipToContent')}
+      </a>
+      <aside className="sidebar" aria-label={t('nav.primaryNav')}>
         <div className="brand-lockup">
           <img src={`${import.meta.env.BASE_URL}favicon.svg`} alt="" width="36" height="36" />
           <div>
             <strong>{t('app.name')}</strong>
             <span>{t('app.privacy')}</span>
           </div>
-          <button
-            className="icon-button sidebar__close"
-            type="button"
-            aria-label={t('nav.closeMenu')}
-            onClick={() => setMenuOpen(false)}
-          >
-            <X aria-hidden="true" />
-          </button>
         </div>
         <nav className="sidebar__nav" aria-label={t('nav.primaryNav')}>
           {navigation.map(({ to, key, icon: Icon }) => (
@@ -158,35 +248,25 @@ function Shell() {
             <CircleHelp size={16} aria-hidden="true" />
             <span>{t('settings.storageBody')}</span>
           </div>
-          <span className="version-label">v0.1.0 · {locale.toUpperCase()}</span>
+          <span className="version-label">
+            v{packageJson.version} · {locale.toUpperCase()}
+          </span>
         </div>
       </aside>
-      {menuOpen ? (
-        <button
-          className="sidebar-scrim"
-          type="button"
-          aria-label={t('common.close')}
-          onClick={() => setMenuOpen(false)}
-        />
-      ) : null}
       <div className="app-main">
         <header className="topbar">
-          <button
-            className="icon-button topbar__menu"
-            type="button"
-            aria-label={t('nav.openMenu')}
-            onClick={() => setMenuOpen(true)}
-          >
-            <Menu aria-hidden="true" />
-          </button>
           <div className="topbar__context">
             <BookOpen size={16} aria-hidden="true" />
             <span>{currentTitle}</span>
           </div>
           <div className="topbar__actions">
-            <span className="status-pill">
-              <span className="status-dot status-dot--online" />
-              {t('app.privacy')}
+            <span className={`status-pill ${online ? '' : 'status-pill--offline'}`}>
+              {online ? (
+                <Wifi size={14} aria-hidden="true" />
+              ) : (
+                <WifiOff size={14} aria-hidden="true" />
+              )}
+              {t(online ? 'app.online' : 'app.offline')}
             </span>
             <button
               className="icon-button"
@@ -199,23 +279,34 @@ function Shell() {
           </div>
         </header>
         <main id="main-content" className="content" tabIndex={-1}>
-          <Suspense
-            fallback={
-              <div className="page-loading" role="status">
-                {t('common.loading')}
-              </div>
-            }
-          >
-            <Routes>
-              <Route path="/" element={<DashboardPage />} />
-              <Route path="/tanks" element={<TanksPage />} />
-              <Route path="/water" element={<WaterPage />} />
-              <Route path="/breeding" element={<BreedingPage />} />
-              <Route path="/care" element={<CarePage />} />
-              <Route path="/settings" element={<SettingsPage />} />
-              <Route path="*" element={<DashboardPage />} />
-            </Routes>
-          </Suspense>
+          {error ? (
+            <div className="notice notice--danger global-error" role="alert">
+              {t(error)}
+            </div>
+          ) : null}
+          {loading ? (
+            <div className="page-loading" role="status">
+              {t('common.loading')}
+            </div>
+          ) : (
+            <Suspense
+              fallback={
+                <div className="page-loading" role="status">
+                  {t('common.loading')}
+                </div>
+              }
+            >
+              <Routes>
+                <Route path="/" element={<DashboardPage />} />
+                <Route path="/tanks" element={<TanksPage />} />
+                <Route path="/water" element={<WaterPage />} />
+                <Route path="/breeding" element={<BreedingPage />} />
+                <Route path="/care" element={<CarePage />} />
+                <Route path="/settings" element={<SettingsPage />} />
+                <Route path="*" element={<DashboardPage />} />
+              </Routes>
+            </Suspense>
+          )}
         </main>
         <nav className="mobile-nav" aria-label={t('nav.mobileNav')}>
           {navigation.map(({ to, key, icon: Icon }) => (
@@ -240,13 +331,15 @@ function Shell() {
 
 export default function App() {
   return (
-    <ToastProvider>
-      <AppProvider>
-        <HashRouter>
-          <ThemeSync />
-          <Shell />
-        </HashRouter>
-      </AppProvider>
-    </ToastProvider>
+    <AppErrorBoundary>
+      <ToastProvider>
+        <AppProvider>
+          <HashRouter>
+            <ThemeSync />
+            <Shell />
+          </HashRouter>
+        </AppProvider>
+      </ToastProvider>
+    </AppErrorBoundary>
   );
 }

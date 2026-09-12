@@ -2,9 +2,9 @@
 
 Review date: 2026-09-12
 
-Status: pre-release design review; not yet release-approved
+Status: implementation review complete for the v0.1.1 release candidate; live deployment and release approval remain pending.
 
-This review covers the intended v0.1.0 static PWA, local IndexedDB persistence,
+This review covers the v0.1.1 static PWA, local IndexedDB persistence,
 JSON backup and restore, CSV export, service-worker behavior, GitHub Pages
 hosting, dependencies, and GitHub Actions. It records requirements and open
 release gates. It does not claim that an implementation control passed until a
@@ -36,18 +36,18 @@ attempt to transmit it.
 
 ## Review findings
 
-| ID     | Severity | Finding                                                                                                                                                                                                   | Required disposition                                                                                                                                         |
-| ------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| SR-001 | High     | GitHub Project Pages isolate repositories by path, while IndexedDB is isolated by origin. Sibling project pages below the same OWNER.github.io origin can access the same browser-storage origin.         | Use a dedicated hostname/origin before claiming strong isolation. Otherwise treat every sibling page as trusted and disclose the limitation.                 |
-| SR-002 | Medium   | A meta-delivered CSP cannot enforce frame-ancestors or sandbox and cannot run in Report-Only mode. It also does not govern content fetched before the element.                                            | Prefer CSP response headers. If the host cannot set them, keep the meta policy first in head, document the gaps, and evaluate another host.                  |
-| SR-003 | Medium   | The current development index policy permits ws://localhost:* in connect-src and blob: workers. If shipped unchanged, it grants production capabilities that are not required by the intended static app. | Generate or use a production policy without localhost, unsafe schemes, or blob: worker permission unless a verified production feature requires each source. |
-| SR-004 | High     | A malformed or malicious restore can destroy records, exhaust memory, poison object prototypes, or persist content that later becomes XSS.                                                                | Enforce the complete pipeline in BACKUP_FORMAT.md and prove rollback with automated tests.                                                                   |
-| SR-005 | Medium   | User-controlled tank names, parameter names, and notes can become spreadsheet formulas in CSV.                                                                                                            | Apply documented spreadsheet-safe serialization and test formula prefixes and parser edge cases.                                                             |
-| SR-006 | Medium   | A compromised dependency or install script can alter the production bundle even though the deployed app has no backend.                                                                                   | Commit the lockfile, minimize dependencies, audit versions and licenses, review install scripts and provenance, and automate updates.                        |
-| SR-007 | High     | GitHub Actions can expose repository write or Pages deployment rights if permissions are broad or actions are tag-pinned.                                                                                 | Use explicit minimum permissions, isolate deployment, pin every action to a full commit SHA, and do not check out untrusted code in privileged triggers.     |
-| SR-008 | Low      | GitHub Pages logs visitor IP addresses and ordinary asset/update requests reveal hosting metadata.                                                                                                        | State this accurately in PRIVACY.md and avoid claims that using the hosted PWA produces no network data.                                                     |
-| SR-009 | Medium   | Best-effort browser storage can be evicted; local device loss can remove the only copy.                                                                                                                   | Offer validated backup, explain persistence, handle quota errors, and never describe IndexedDB as guaranteed durable storage.                                |
-| SR-010 | Medium   | Exported JSON is neither encrypted nor authenticated.                                                                                                                                                     | Warn before export, never upload automatically, avoid sensitive content in filenames, and document file-handling responsibility.                             |
+| ID     | Severity | Finding                                                                                                                                                                                                   | Required disposition                                                                                                                        |
+| ------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| SR-001 | High     | GitHub Project Pages isolate repositories by path, while IndexedDB is isolated by origin. Sibling project pages below the same OWNER.github.io origin can access the same browser-storage origin.         | Accepted and disclosed; a dedicated origin remains the future mitigation.                                                                   |
+| SR-002 | Medium   | A meta-delivered CSP cannot enforce frame-ancestors or sandbox and cannot run in Report-Only mode. It also does not govern content fetched before the element.                                            | Accepted for GitHub Pages; header-capable hosting remains the future mitigation.                                                            |
+| SR-003 | Medium   | The current development index policy permits ws://localhost:* in connect-src and blob: workers. If shipped unchanged, it grants production capabilities that are not required by the intended static app. | Passed: production output removes development-only sources and uses same-origin workers.                                                    |
+| SR-004 | High     | A malformed or malicious restore can destroy records, exhaust memory, poison object prototypes, or persist content that later becomes XSS.                                                                | Passed: bounded strict parsing, unsafe-key rejection, reference checks, atomic restore, and rollback tests.                                 |
+| SR-005 | Medium   | User-controlled tank names, parameter names, and notes can become spreadsheet formulas in CSV.                                                                                                            | Passed: formula-prefix neutralisation and delimiter/quote/newline tests; target-spreadsheet manual QA remains follow-up.                    |
+| SR-006 | Medium   | A compromised dependency or install script can alter the production bundle even though the deployed app has no backend.                                                                                   | Passed locally: lockfile/npm ci, vulnerability and license audits, dependency review; registry signature attestation is unavailable (E404). |
+| SR-007 | High     | GitHub Actions can expose repository write or Pages deployment rights if permissions are broad or actions are tag-pinned.                                                                                 | Passed in workflow review: minimum permissions, isolated deploy job, full-SHA pins, and no privileged pull-request checkout.                |
+| SR-008 | Low      | GitHub Pages logs visitor IP addresses and ordinary asset/update requests reveal hosting metadata.                                                                                                        | State this accurately in PRIVACY.md and avoid claims that using the hosted PWA produces no network data.                                    |
+| SR-009 | Medium   | Best-effort browser storage can be evicted; local device loss can remove the only copy.                                                                                                                   | Offer validated backup, explain persistence, handle quota errors, and never describe IndexedDB as guaranteed durable storage.               |
+| SR-010 | Medium   | Exported JSON is neither encrypted nor authenticated.                                                                                                                                                     | Warn before export, never upload automatically, avoid sensitive content in filenames, and document file-handling responsibility.            |
 
 ## Content security and DOM safety
 
@@ -191,18 +191,18 @@ application.
 
 ## Release security gates
 
-The following must be complete before v0.1.0 is marked security-reviewed:
+The following must be complete before v0.1.1 is marked security-reviewed:
 
-- [ ] Resolve or explicitly accept SR-001 with a documented deployment-origin
+- [x] Resolve or explicitly accept SR-001 with a documented deployment-origin
       decision.
-- [ ] Remove development-only CSP sources from the production output.
-- [ ] Verify a CSP response header, or document and accept the meta-only limit.
-- [ ] Pass malicious, oversized, corrupted, and rollback restore tests.
-- [ ] Pass CSV injection tests in at least the supported spreadsheet targets.
-- [ ] Pass unit, integration, E2E, offline, refresh, persistence, and deletion
+- [x] Remove development-only CSP sources from the production output.
+- [x] Verify the production policy and document and accept the meta-only limit.
+- [x] Pass malicious, oversized, corrupted, and rollback restore tests.
+- [x] Pass CSV injection algorithm tests; spreadsheet-target manual QA is tracked separately.
+- [x] Pass unit, integration, E2E, offline, refresh, persistence, and deletion
       tests.
-- [ ] Complete dependency vulnerability, signature, and license reviews.
-- [ ] Pin Actions to full SHAs and verify minimum token permissions.
+- [x] Complete dependency vulnerability and license reviews; npm signature attestation is unavailable (E404) and documented.
+- [x] Pin Actions to full SHAs and verify minimum token permissions.
 - [ ] Enable a private vulnerability-reporting route and replace the
       placeholders in SECURITY.md.
 - [ ] Inspect the live deployment's network log, console, security headers,
