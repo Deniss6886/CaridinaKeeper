@@ -29,11 +29,10 @@ pull request, screenshot, or social-media post.
 
 The preferred reporting channel is GitHub Private Vulnerability Reporting:
 
-    https://github.com/OWNER/REPOSITORY/security/advisories/new
+    https://github.com/Deniss6886/CaridinaKeeper/security/advisories/new
 
-OWNER and REPOSITORY are placeholders. This document must be updated with the
-canonical repository URL after the public repository is created and Private
-Vulnerability Reporting is enabled.
+Private Vulnerability Reporting should be enabled on the canonical repository
+after publication.
 
 If the private reporting form is not yet available, open a public issue that
 contains only a request for a private security contact. Do not include the
