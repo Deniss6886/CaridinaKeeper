@@ -29,8 +29,8 @@ Last updated: 2026-09-12
 
 ## Verified remotely
 
-- Release candidate commits `444419f`, `74ac355`, and `067d31f` are pushed to `main`.
-- GitHub CI, CodeQL v4, and the Pages deployment completed successfully for `067d31f` (run `34702318022`).
+- Release commits `444419f`, `74ac355`, `067d31f`, and `58cb096` are pushed to `main`.
+- GitHub CI, CodeQL v4, and the Pages deployment completed successfully for `58cb096` (run `34702873947`).
 - External live verification passed: 10 Playwright tests on desktop and Pixel 7 against `https://deniss6886.github.io/CaridinaKeeper/`; app, manifest, and service worker returned HTTP 200.
 
 ## Remaining
