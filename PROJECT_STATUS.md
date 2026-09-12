@@ -18,11 +18,11 @@
 
 ## In Progress
 
-- Public repository creation, first commit, GitHub Pages configuration, and final remote verification.
+- Strongest-model final architecture/security/quality review and future evidence/integration work.
 
 ## Remaining
 
-- Push the reviewed repository to GitHub and verify Pages/Actions/security settings.
+- ~~Push the reviewed repository to GitHub and verify Pages/Actions/security settings.~~ Done for the current preview.
 - Have the strongest available model perform the requested final architecture/security/quality review after this autonomous pass.
 - Future work: evidence provenance records, water-batch traceability, read-only Home Assistant ingestion, and dedicated-origin migration tooling.
 
@@ -34,10 +34,12 @@
 
 ## Verification
 
-- Empty workspace confirmed on 2026-09-12; repository is bootstrapped on branch `main` and remains uncommitted until the final local verification is complete.
+- Empty workspace confirmed on 2026-09-12; repository is committed on branch `main` and pushed to `https://github.com/Deniss6886/CaridinaKeeper`.
 - Node.js 24.19.0, Git 2.53.0, GitHub CLI 2.100.0, and npm 11.17.0 are available.
 - `npm install --no-fund --no-audit` completed successfully and created `package-lock.json` (532 packages; one transitive `glob` deprecation warning).
 - `npm run check` passes: Prettier, ESLint (`--max-warnings=0`), strict TypeScript, 9 Vitest tests, and production build.
 - `npm run test:e2e` passes: 6 Playwright tests across Chromium desktop/mobile, including axe checks and release screenshot capture.
 - `npm run security:audit` passes with 0 vulnerabilities at the high threshold.
 - Production preview artifacts and screenshots were regenerated after the accessibility contrast/landmark fix.
+- GitHub CI, CodeQL, and Pages deployment runs succeeded for commit `22885ef`; live preview is `https://deniss6886.github.io/CaridinaKeeper/`.
+- GitHub repository is public with MIT license, Topics, Pages workflow, Dependabot, secret scanning, push protection, and Dependabot security updates enabled.

@@ -2,6 +2,8 @@
 
 CaridinaKeeper is a privacy-first, offline-first progressive web app for aquarium records and Caridina breeding journals. It stores records in the browser's IndexedDB, works without an account or backend, and exports a versioned JSON backup plus a spreadsheet-safe CSV of water readings.
 
+Live preview: [deniss6886.github.io/CaridinaKeeper](https://deniss6886.github.io/CaridinaKeeper/) · Source: [GitHub](https://github.com/Deniss6886/CaridinaKeeper)
+
 > **Status:** 0.1.0 preview. The data model and workflows are usable, but migrations, browser support, and the Home Assistant connector remain under active development. Do not treat a target warning as a diagnosis or as permission to actuate equipment.
 
 ## What is included
