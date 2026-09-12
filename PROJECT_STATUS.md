@@ -13,6 +13,7 @@
 - English/German localization, dark/light/system theme, keyboard-friendly dialogs, responsive mobile navigation, reduced-motion styling, PWA update prompt, and accessible labels added.
 - Unit and database coverage added for range evaluation, latest-reading selection, reminders, physical calculations, safe CSV, backup validation, IndexedDB demo loading, and cascading deletion.
 - Playwright smoke coverage added for desktop/mobile navigation and demo workflow; axe accessibility assertions run in both projects.
+- End-to-end acceptance journey completed: create tank, set targets, add measurement, add breeding line/event, log care, export JSON, delete all, restore JSON, and verify persistence.
 - Release/community files added: README, MIT license, contributing guide, code of conduct, changelog, roadmap, support, architecture/data/development docs, OpenAI OSS readiness notes, issue/PR templates, CODEOWNERS, Dependabot, CI, Pages, and CodeQL workflows.
 - Release screenshots captured in `docs/screenshots/` from the production preview build.
 
@@ -38,7 +39,7 @@
 - Node.js 24.19.0, Git 2.53.0, GitHub CLI 2.100.0, and npm 11.17.0 are available.
 - `npm install --no-fund --no-audit` completed successfully and created `package-lock.json` (532 packages; one transitive `glob` deprecation warning).
 - `npm run check` passes: Prettier, ESLint (`--max-warnings=0`), strict TypeScript, 9 Vitest tests, and production build.
-- `npm run test:e2e` passes: 6 Playwright tests across Chromium desktop/mobile, including axe checks and release screenshot capture.
+- `npm run test:e2e` passes: 7 Playwright tests across Chromium desktop/mobile (1 intentional mobile skip for the full form journey), including axe checks, backup round-trip, and release screenshot capture.
 - `npm run security:audit` passes with 0 vulnerabilities at the high threshold.
 - Production preview artifacts and screenshots were regenerated after the accessibility contrast/landmark fix.
 - GitHub CI, CodeQL, and Pages deployment runs succeeded for commit `22885ef`; live preview is `https://deniss6886.github.io/CaridinaKeeper/`.
